@@ -5,6 +5,9 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import rubberDuckRoutes from './routes/rubberDucks.js'; // Import the routes
 
+import analyzeRoutes from "./routes/analyze.js";
+
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -21,6 +24,8 @@ app.use(cors({
 
 // Use the routes file for all `/ducks` routes
 app.use('/ducks', rubberDuckRoutes);
+
+app.use("/api", analyzeRoutes);
 
 // Start server
 const PORT = process.env.PORT;
