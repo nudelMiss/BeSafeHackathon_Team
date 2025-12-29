@@ -1,0 +1,13 @@
+import styles from './ChatBubble.module.css';
+
+const ChatBubble = ({ message, isUser = false, isTyping = false }) => {
+  return (
+    <div className={`${styles.bubble} ${isUser ? styles.userBubble : styles.botBubble} ${isTyping ? styles.typing : ''}`}>
+      <p className={styles.messageText}>{message}</p>
+      {isTyping && <span className={styles.typingIndicator}>...</span>}
+    </div>
+  );
+};
+
+export default ChatBubble;
+
