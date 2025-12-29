@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import ChatBubble from '../ChatBubble/ChatBubble';
 import ChipSelector from '../ChipSelector/ChipSelector';
+import MusicPlayer from '../MusicPlayer/MusicPlayer';
 import styles from './ChatInterface.module.css';
-import axiosInstance from '../../services/api';
+// import axiosInstance from '../../services/api'; // Uncomment when backend is ready
 
 const ChatInterface = () => {
   // State for managing messages in the chat
@@ -23,27 +24,38 @@ const ChatInterface = () => {
   // Store the options for current chip question
   const [currentOptions, setCurrentOptions] = useState([]);
   
+  // Track if current question allows multiple selection
+  const [allowMultipleSelection, setAllowMultipleSelection] = useState(false);
+  
+  // Track if we're in the follow-up phase (after initial response)
+  const [showFollowUp, setShowFollowUp] = useState(false);
+  
+  // Store severity from backend (for resource selection)
+  // eslint-disable-next-line no-unused-vars
+  const [severity, setSeverity] = useState(null); // Stored for potential future use
+  
   // Reference to scroll to bottom of chat
   const messagesEndRef = useRef(null);
 
   // Define all questions we want to ask
   const questions = [
     {
-      text: "שלום! אני כאן כדי לעזור לך. בואי נתחיל - מה קרה? ספרי לי בקצרה על האירוע שחווית.",
+      text: "שלום! אני כאן כדי לעזור לך. בואי נתחיל - איך את מרגישה עכשיו? (אפשר לבחור כמה רגשות)",
+      type: "chips",
+      key: "feelings",  // Changed to plural - will be an array
+      multiple: true,  // Allow multiple selection
+      options: ["מבולבלת", "פחד", "עצב", "כעס", "חרדה", "תקווה", "אחר"]
+    },
+    {
+      text: "מה קרה? ספרי לי בקצרה על האירוע שחווית.",
       type: "text",  // User will type their answer
-      key: "incident"  // Save answer under this key in userData
+      key: "incident"
     },
     {
       text: "איפה זה קרה?",
-      type: "chips",  // User will select from chips
+      type: "chips",
       key: "location",
       options: ["רשתות חברתיות", "אפליקציות הודעות", "אתר אינטרנט", "משחקים מקוונים", "אחר"]
-    },
-    {
-      text: "איך את מרגישה עכשיו?",
-      type: "chips",
-      key: "feeling",
-      options: ["מבולבלת", "פחד", "עצב", "כעס", "חרדה", "אחר"]
     },
     {
       text: "האם את רוצה שנעזור לך לטפל בזה?",
@@ -52,6 +64,22 @@ const ChatInterface = () => {
       options: ["כן, אני רוצה עזרה", "אני לא בטוחה", "לא כרגע"]
     }
   ];
+
+  // Resource options based on severity
+  const resourceOptions = {
+    mild: [
+      "עזרה עצמית - טכניקות הרגעה",
+      "משאבים מקוונים",
+      "קהילת תמיכה",
+      "טיפים להתמודדות"
+    ],
+    severe: [
+      "עזרה מקצועית - פניה למטפל",
+      "קווי חירום",
+      "תמיכה מיידית",
+      "ליווי מקצועי"
+    ]
+  };
 
   // Auto-scroll to bottom when new messages appear
   const scrollToBottom = () => {
@@ -64,10 +92,13 @@ const ChatInterface = () => {
 
   // Initialize chat with welcome message when component loads
   useEffect(() => {
-    const welcomeMessage = "שלום! אני כאן כדי לעזור לך. בואי נתחיל - מה קרה? ספרי לי בקצרה על האירוע שחווית.";
+    const welcomeMessage = "שלום! אני כאן כדי לעזור לך. בואי נתחיל - איך את מרגישה עכשיו? (אפשר לבחור כמה רגשות)";
     setMessages([{ text: welcomeMessage, isUser: false }]);
-    setShowChips(false);
-  }, []);
+    setShowChips(true);
+    setCurrentOptions(questions[0].options);
+    setAllowMultipleSelection(questions[0].multiple || false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // questions is stable, no need to include in deps
 
   // Handle when user submits text input
   const handleTextSubmit = (text) => {
@@ -93,11 +124,23 @@ const ChatInterface = () => {
     setUserData(prev => ({ ...prev, [currentQuestion.key]: value }));
 
     // Show user's selection as a message
-    const userMessage = { text: value, isUser: true };
+    // For multiple selection, show array as comma-separated
+    const displayText = Array.isArray(value) ? value.join(', ') : value;
+    const userMessage = { text: displayText, isUser: true };
     setMessages(prev => [...prev, userMessage]);
-    setShowChips(false);  // Hide chips after selection
+    
+    // For single selection, hide chips and move to next question
+    // For multiple selection, keep chips visible until user is done
+    if (!currentQuestion.multiple) {
+      setShowChips(false);
+      moveToNextQuestion();
+    }
+    // If multiple selection, chips stay visible - user can add more or we wait for "done" button
+  };
 
-    // Move to next question
+  // Handle when user is done with multiple selection
+  const handleMultipleSelectionDone = () => {
+    setShowChips(false);
     moveToNextQuestion();
   };
 
@@ -118,6 +161,9 @@ const ChatInterface = () => {
         if (nextQuestion.type === "chips") {
           setCurrentOptions(nextQuestion.options);
           setShowChips(true);
+          setAllowMultipleSelection(nextQuestion.multiple || false);
+        } else {
+          setAllowMultipleSelection(false);
         }
       }, 500);
     } else {
@@ -134,18 +180,83 @@ const ChatInterface = () => {
     // Show loading message
     setMessages(prev => [...prev, { text: "אני מעבדת את המידע שלך...", isUser: false, isTyping: true }]);
 
+    // ============================================
+    // TEMPORARY MOCK FOR TESTING - REMOVE WHEN BACKEND IS READY
+    // ============================================
+    // TODO: Replace this mock with actual backend call:
+    // const response = await axiosInstance.post('/incidents', userData);
+    
+    // Simulate backend delay (like real API call)
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    // Remove typing indicator
+    setMessages(prev => prev.filter(msg => !msg.isTyping));
+    
+    // MOCK RESPONSE - This is temporary for testing UI
+    // In real backend, severity will be calculated based on userData
+    // Backend should return: { success: true, severity: "mild"|"severe", message: "..." }
+    
+    // Simulate severity assessment (backend will do this properly)
+    const feelings = Array.isArray(userData.feelings) ? userData.feelings : [];
+    const severeFeelings = ["פחד", "חרדה", "כעס"];
+    const hasSevereFeeling = feelings.some(f => severeFeelings.includes(f));
+    const mockSeverity = hasSevereFeeling ? "severe" : "mild";
+    
+    // Create contextual response based on severity (subtle signals - not showing severity directly)
+    let severitySignal = "";
+    if (mockSeverity === "severe") {
+      severitySignal = "אני רואה שזה משפיע עלייך מאוד. חשוב שתדעי שיש עזרה מקצועית זמינה עבורך.";
+    } else {
+      severitySignal = "יש לך כלים להתמודד עם זה, ואנחנו כאן כדי לתמוך בך.";
+    }
+    
+    const mockResponse = {
+      data: {
+        success: true,
+        severity: mockSeverity,  // Backend should return this (not shown to user directly)
+        message: `[MOCK RESPONSE - FOR TESTING ONLY] תודה ששיתפת אותי. זה לא קל לדבר על דברים כאלה, ואני גאה בך שהגעת לכאן. ${severitySignal} מה שקרה לך לא בסדר, ואת לא אשמה. בואי נחשוב יחד על דרכים להתמודד עם זה. יש לך תמיכה כאן. זכרי - את לא לבד.`
+      }
+    };
+    
+    // Extract severity from response (backend will provide this)
+    const responseSeverity = mockResponse.data.severity || mockSeverity;
+    setSeverity(responseSeverity);
+    
+    // Display mock response in chunks
+    if (mockResponse.data && mockResponse.data.message) {
+      await displayResponseInChunks(mockResponse.data.message);
+    }
+    
+    // After response, show follow-up with music and resources
+    await showFollowUpResources(responseSeverity);
+    
+    setIsLoading(false);
+    
+    // ============================================
+    // END OF TEMPORARY MOCK
+    // ============================================
+    
+    /* ORIGINAL BACKEND CODE (commented out for now):
     try {
       // Send userData to backend endpoint
-      // NOTE: You need to create this endpoint in your backend!
       const response = await axiosInstance.post('/incidents', userData);
       
       // Remove typing indicator
       setMessages(prev => prev.filter(msg => !msg.isTyping));
       
+      // Extract severity from backend response (backend calculates this)
+      const responseSeverity = response.data?.severity || "mild";
+      setSeverity(responseSeverity);
+      
       // If backend returns a message, display it in chunks
       if (response.data && response.data.message) {
         await displayResponseInChunks(response.data.message);
       }
+      
+      // After response, show follow-up with music and resources
+      const feelings = Array.isArray(userData.feelings) ? userData.feelings : [];
+      const primaryFeeling = feelings[0] || "אחר";
+      await showFollowUpResources(responseSeverity, primaryFeeling);
     } catch (error) {
       console.error('Error submitting data:', error);
       // Remove typing indicator and show error
@@ -156,6 +267,7 @@ const ChatInterface = () => {
     } finally {
       setIsLoading(false);
     }
+    */
   };
 
   // Display backend response in chunks to simulate live chat
@@ -171,6 +283,40 @@ const ChatInterface = () => {
         isUser: false 
       }]);
     }
+  };
+
+  // Show follow-up with music and resources
+  const showFollowUpResources = async (severityLevel) => {
+    // Wait a bit after the response
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Show message about resources
+    setMessages(prev => [...prev, { 
+      text: "בואי נחשוב יחד על מה שיכול לעזור לך. יש כאן כמה אפשרויות:", 
+      isUser: false 
+    }]);
+    
+    // Enable follow-up phase
+    setShowFollowUp(true);
+    setCurrentOptions(resourceOptions[severityLevel] || resourceOptions.mild);
+    setShowChips(true);
+    setAllowMultipleSelection(false);
+  };
+
+  // Handle resource selection
+  const handleResourceSelect = (resource) => {
+    const userMessage = { text: resource, isUser: true };
+    setMessages(prev => [...prev, userMessage]);
+    setShowChips(false);
+    
+    // Show confirmation message
+    setTimeout(() => {
+      setMessages(prev => [...prev, { 
+        text: "מצוין! אני כאן אם תצטרכי עוד עזרה. זכרי - את לא לבד 💙", 
+        isUser: false 
+      }]);
+      setShowFollowUp(false);
+    }, 500);
   };
 
   // Handle text input
@@ -208,10 +354,25 @@ const ChatInterface = () => {
           <div className={styles.chipWrapper}>
             <ChipSelector
               options={currentOptions}
-              onSelect={handleChipSelect}
-              selectedValue={userData[currentQuestion?.key]}
+              onSelect={showFollowUp ? handleResourceSelect : handleChipSelect}
+              selectedValue={showFollowUp ? null : (userData[currentQuestion?.key] || (allowMultipleSelection ? [] : null))}
+              multiple={allowMultipleSelection && !showFollowUp}
             />
+            {/* Show "Done" button for multiple selection */}
+            {allowMultipleSelection && !showFollowUp && Array.isArray(userData[currentQuestion?.key]) && userData[currentQuestion?.key].length > 0 && (
+              <button
+                onClick={handleMultipleSelectionDone}
+                className={styles.doneButton}
+              >
+                סיימתי ✓
+              </button>
+            )}
           </div>
+        )}
+
+        {/* Show music player in follow-up phase */}
+        {showFollowUp && userData.feelings && Array.isArray(userData.feelings) && userData.feelings.length > 0 && (
+          <MusicPlayer feeling={userData.feelings[0]} />
         )}
         
         {/* Invisible element to scroll to */}
