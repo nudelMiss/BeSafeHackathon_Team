@@ -14,7 +14,7 @@ const AnalyzeProvider = ({ children }) => {
         setError(null);
 
         try {
-            const res = await api.post('/analyze', request);
+            const res = await api.post('/api/analyze', request);
             setResponse(res.data);
         } catch (error) {
             console.error('Error analyzing the message:', error);
