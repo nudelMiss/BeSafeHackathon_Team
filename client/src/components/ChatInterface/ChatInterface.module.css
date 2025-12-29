@@ -106,3 +106,28 @@
   transform: translateY(0);
 }
 
+.doneButton {
+  margin-top: 12px;
+  padding: 10px 24px;
+  background-color: #ff99c8;
+  color: white;
+  border: none;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  align-self: center;
+}
+
+.doneButton:hover {
+  background-color: #ff80b3;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(255, 179, 209, 0.3);
+}
+
+.doneButton:active {
+  transform: translateY(0);
+}
+
