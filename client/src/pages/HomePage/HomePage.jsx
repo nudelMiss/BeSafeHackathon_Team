@@ -1,7 +1,6 @@
 import styles from './Home.module.css';
 import RandomDuck from '../../components/RandomDuck/RandomDuck.jsx';
 
-
 const Home = () => {
   return (
     <div className={styles.home}>
