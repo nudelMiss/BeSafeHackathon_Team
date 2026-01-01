@@ -1,8 +1,9 @@
 import { getOpenAIClient } from "./openAI.js";
+import {buildResponsibleAdultEmail} from "../utils/buildResponsibleAdultEmail.js";
 
 export const analyzeMessage = async (req, res) => {
   try {
-    const { messageText, context } = req.body;
+    const { messageText, context, ResponsibleAdultEmail } = req.body;
 
     if (!messageText || !context) {
       return res.status(400).json({
@@ -78,7 +79,15 @@ ${JSON.stringify(context)}
       });
     }
 
-    return res.status(200).json(parsed);
+      let report = false;
+      const shouldReport = ResponsibleAdultEmail && parsed.riskLevel === "High";
+
+      if (shouldReport) {
+          const emailContent = buildResponsibleAdultEmail(parsed);
+          report = {sent : true, emailContent: emailContent} ;
+      }
+
+      return res.status(200).json({...parsed, report});
     
   } catch (error) {
     console.error("Analyze error:", error);
