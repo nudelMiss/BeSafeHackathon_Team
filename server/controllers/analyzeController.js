@@ -1,13 +1,56 @@
 import { getOpenAIClient } from "./openAI.js";
+import crypto from "crypto";
+import { addReport, getReportsByUser } from "../services/reportStore.js";
 
 export const analyzeMessage = async (req, res) => {
   try {
-    const { messageText, context } = req.body;
+    const { user, messageText, context } = req.body;
 
     if (!messageText || !context) {
       return res.status(400).json({
         responseText: "חסר messageText או context",
       });
+    }
+
+    if (!user?.id) {
+      return res.status(400).json({
+        responseText: "חסר user.id",
+      });
+    }
+
+    // Advanced context: export history (for tone adjustment from second message)
+    let reportCount = 0;
+    let lastCategories = [];
+
+    try {
+      const previousReports = await getReportsByUser(user.id);
+      reportCount = previousReports.length;
+      lastCategories = previousReports
+        .slice(-2)
+        .map((r) => r?.analysis?.category)
+        .filter(Boolean);
+    } catch (e) {
+      console.error("Failed to load history (non-blocking):", e);
+    }
+
+    let toneInstruction = "";
+    if (reportCount >= 1) {
+      toneInstruction = `
+הערה חשובה: זו אינה הפעם הראשונה שהמשתמשת משתמשת במערכת.
+יש להתאים את התשובות כך שיהיו פחות מתנצלות ויותר ברורות ומגינות.
+- gentle: עדיין מנומס, אבל מציב גבול חד.
+- assertive: חד, קצר, לא משאיר מקום למשא ומתן.
+- noReply: הנחיה פעולה ברורה (לחסום/לדווח/לשמור תיעוד).
+- supportLine: משפט מחזק בסגנון "את לא אשמה / מותר לך לעצור את זה".
+`.trim();
+    }
+
+    if (reportCount >= 3) {
+      toneInstruction += `
+
+נוסף: זוהה דפוס חוזר (כמה דיווחים קודמים).
+מותר להיות חד-משמעית יותר ולהמליץ על צעדים ברורים (חסימה/דיווח/שיתוף אדם מבוגר/גורם אחראי אם מתאים).
+`.trim();
     }
 
     const openai = getOpenAIClient();
@@ -48,6 +91,8 @@ export const analyzeMessage = async (req, res) => {
 - category = "Other"
 - explanation = "לא זוהתה סכנה מיידית, אך מומלץ לשמור על גבולות ופרטיות."
 - עדיין למלא replyOptions ו-supportLine.
+
+${toneInstruction}
 `.trim();
 
     const userPrompt = `
@@ -56,6 +101,12 @@ messageText:
 
 context:
 ${JSON.stringify(context)}
+
+userHistorySummary:
+{
+  "reportCount": ${reportCount},
+  "lastCategories": ${JSON.stringify(lastCategories)}
+}
 `.trim();
 
     const aiResponse = await openai.responses.create({
@@ -78,8 +129,23 @@ ${JSON.stringify(context)}
       });
     }
 
+    const report = {
+      id: crypto.randomUUID(),
+      userId: user.id,
+      nickname: user.nickname || null,
+      messageText,
+      context,
+      analysis: parsed,
+      createdAt: new Date().toISOString().replace("T", " ").split(".")[0],
+    };
+
+    try {
+      await addReport(report);
+    } catch (e) {
+      console.error("Failed to save report:", e);
+    }
+
     return res.status(200).json(parsed);
-    
   } catch (error) {
     console.error("Analyze error:", error);
     return res.status(500).json({
