@@ -4,9 +4,7 @@ import { fileURLToPath } from "url";
 import cors from "cors";
 import dotenv from "dotenv";
 
-import analyzeRoutes from "./routes/analyze.js";
-import historyRoutes from "./routes/history.js";
-
+import reportsRoutes from "./routes/reports.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,9 +26,7 @@ app.use(
 
 app.use("/images", express.static(path.join(__dirname, "images")));
 
-app.use("/api", analyzeRoutes);
-app.use("/api", historyRoutes);
-
+app.use("/api/reports", reportsRoutes);
 
 // Start server
 const PORT = process.env.PORT || 5000;

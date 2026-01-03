@@ -1,24 +1,27 @@
 import { getOpenAIClient } from "./openAI.js";
 import crypto from "crypto";
-import { addReport, getReportsByUser } from "../services/reportStore.js";
+import {
+  addReport,
+  getReportsByUser,
+  getOrCreateUserByNickname,
+} from "../services/reportStore.js";
 
 export const analyzeMessage = async (req, res) => {
   try {
-    const { user, messageText, context } = req.body;
+    const { nickname, messageText, context } = req.body;
 
     if (!messageText || !context) {
-      return res.status(400).json({
-        responseText: "חסר messageText או context",
-      });
+      return res.status(400).json({ responseText: "חסר messageText או context" });
     }
 
-    if (!user?.id) {
-      return res.status(400).json({
-        responseText: "חסר user.id",
-      });
+    if (!nickname || typeof nickname !== "string" || !nickname.trim()) {
+      return res.status(400).json({ responseText: "חסר nickname" });
     }
 
-    // Advanced context: export history (for tone adjustment from second message)
+    // The client sends a nickname; the server resolves/creates a unique userId for it
+    const user = await getOrCreateUserByNickname(nickname.trim()); // { id, nickname }
+
+    // Load user history for tone adjustment (non-blocking)
     let reportCount = 0;
     let lastCategories = [];
 
@@ -33,6 +36,7 @@ export const analyzeMessage = async (req, res) => {
       console.error("Failed to load history (non-blocking):", e);
     }
 
+    // Tone adjustments based on history
     let toneInstruction = "";
     if (reportCount >= 1) {
       toneInstruction = `
@@ -57,11 +61,11 @@ export const analyzeMessage = async (req, res) => {
 
     const systemPrompt = `
 את עוזרת דיגיטלית לבטיחות ברשת.
-נתון: messageText + context { channel: "private"|"group", senderType: "stranger"|"known", feeling: string }.
+נתון: messageText + context { channel: "פרטי"|"קבוצה", senderType: "זר"|"מוכר", feeling: string }.
 
 החזירי JSON בלבד (בלי טקסט מסביב, בלי markdown) בפורמט המדויק:
 {
-  "riskLevel": "Low" | "Medium" | "High",
+  "riskLevel": "נמוך" | "בינוני" | "גבוה",
   "category": string,
   "explanation": string,
   "replyOptions": {
@@ -73,22 +77,30 @@ export const analyzeMessage = async (req, res) => {
 }
 
 כללים:
+- חשוב: יש להשתמש גם ב-context (פרטי/קבוצה, זר/מוכר, feeling) כדי לקבוע riskLevel,
+  גם אם messageText קצר, מרומז או "לא נשמע" אלים/בוטה.
+
 - riskLevel:
-  - High: סודיות, מניפולציה, בקשות לתוכן אינטימי, איומים, סחיטה או גרומינג ברור.
-  - Medium: לחץ, חציית גבולות, הטרדה מתמשכת, תוכן מיני מרומז או התנהגות מטרידה.
-  - Low: חוסר נעימות, שיימינג, עקיצות או שיפוטיות ללא איום ישיר.
-- category: תווית קצרה באנגלית ב-CamelCase (למשל: Grooming, SexualPressure, Shaming, Harassment, Threat, Spam, Other).
+  - גבוה: סודיות, מניפולציה, בקשות לתוכן אינטימי, איומים, סחיטה או גרומינג ברור.
+  - בינוני: לחץ, חציית גבולות, הטרדה מתמשכת, תוכן מיני מרומז או התנהגות מטרידה.
+  - נמוך: חוסר נעימות, שיימינג, עקיצות או שיפוטיות ללא איום ישיר.
+
+- category: תווית קצרה בעברית, אחת מהאפשרויות (או דומה מאוד):
+  גרומינג, לחץ מיני, שיימינג, הטרדה, איום, ספאם, אחר
+
 - explanation: 1–2 משפטים בעברית שמסבירים למה זה מסוכן/בעייתי, ללא הטפה.
+
 - replyOptions:
   - gentle: משפט אחד מכבד שמציב גבול.
   - assertive: משפט אחד חד וברור.
   - noReply: הנחיה קצרה מה לעשות בלי להגיב (לדוגמה: "לא להגיב, לחסום ולדווח.").
+
 - supportLine: משפט תמיכה קצר בעברית.
-- התאימי את הניסוח ל-feeling (למשל scared / pressured / embarrassed).
+- התאימי את הניסוח ל-feeling (למשל: מפוחדת / לחוצה / מובכת).
 
 אם אין סכנה ברורה:
-- riskLevel = "Low"
-- category = "Other"
+- riskLevel = "נמוך"
+- category = "אחר"
 - explanation = "לא זוהתה סכנה מיידית, אך מומלץ לשמור על גבולות ופרטיות."
 - עדיין למלא replyOptions ו-supportLine.
 
@@ -132,7 +144,7 @@ userHistorySummary:
     const report = {
       id: crypto.randomUUID(),
       userId: user.id,
-      nickname: user.nickname || null,
+      nickname: user.nickname,
       messageText,
       context,
       analysis: parsed,
@@ -140,12 +152,18 @@ userHistorySummary:
     };
 
     try {
-      await addReport(report);
+      await addReport(user.id, report);
     } catch (e) {
       console.error("Failed to save report:", e);
     }
 
-    return res.status(200).json(parsed);
+    return res.status(200).json({
+      ...parsed,
+      userId: user.id,
+      nickname: user.nickname,
+      reportId: report.id,
+      createdAt: report.createdAt,
+    });
   } catch (error) {
     console.error("Analyze error:", error);
     return res.status(500).json({
