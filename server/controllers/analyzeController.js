@@ -21,6 +21,18 @@ export const analyzeMessage = async (req, res) => {
     // The client sends a nickname; the server resolves/creates a unique userId for it
     const user = await getOrCreateUserByNickname(nickname.trim()); // { id, nickname }
 
+    // Minimal support for feelings[] (expects Hebrew context from the client)
+    const feelings = Array.isArray(context?.feelings)
+      ? context.feelings
+          .filter((f) => typeof f === "string" && f.trim())
+          .map((f) => f.trim())
+      : [];
+
+    const contextWithFeelings = {
+      ...context,
+      feelings,
+    };
+
     // Load user history for tone adjustment (non-blocking)
     let reportCount = 0;
     let lastCategories = [];
@@ -61,7 +73,8 @@ export const analyzeMessage = async (req, res) => {
 
     const systemPrompt = `
 את עוזרת דיגיטלית לבטיחות ברשת.
-נתון: messageText + context { channel: "פרטי"|"קבוצה", senderType: "זר"|"מוכר", feeling: string }.
+נתון: messageText + context { channel: "פרטי"|"קבוצה", senderType: "זר"|"מוכר", feelings: string[] }.
+שדה feelings הוא רשימת רגשות בעברית (יכול להיות רגש אחד או יותר).
 
 החזירי JSON בלבד (בלי טקסט מסביב, בלי markdown) בפורמט המדויק:
 {
@@ -77,7 +90,7 @@ export const analyzeMessage = async (req, res) => {
 }
 
 כללים:
-- חשוב: יש להשתמש גם ב-context (פרטי/קבוצה, זר/מוכר, feeling) כדי לקבוע riskLevel,
+- חשוב: יש להשתמש גם ב-context (פרטי/קבוצה, זר/מוכר, feelings) כדי לקבוע riskLevel,
   גם אם messageText קצר, מרומז או "לא נשמע" אלים/בוטה.
 
 - riskLevel:
@@ -96,7 +109,9 @@ export const analyzeMessage = async (req, res) => {
   - noReply: הנחיה קצרה מה לעשות בלי להגיב (לדוגמה: "לא להגיב, לחסום ולדווח.").
 
 - supportLine: משפט תמיכה קצר בעברית.
-- התאימי את הניסוח ל-feeling (למשל: מפוחדת / לחוצה / מובכת).
+
+- התאימי את הניסוח לרגשות ב-feelings (למשל: מפוחדת / לחוצה / מובכת / לא נעים).
+  אם יש כמה רגשות, התייחסי לרגש הדומיננטי (כמו מפוחדת/לחוצה) והשתמשי בשאר כדי לכוון את הטון.
 
 אם אין סכנה ברורה:
 - riskLevel = "נמוך"
@@ -112,7 +127,7 @@ messageText:
 """${messageText}"""
 
 context:
-${JSON.stringify(context)}
+${JSON.stringify(contextWithFeelings)}
 
 userHistorySummary:
 {
@@ -146,7 +161,7 @@ userHistorySummary:
       userId: user.id,
       nickname: user.nickname,
       messageText,
-      context,
+      context: contextWithFeelings,
       analysis: parsed,
       createdAt: new Date().toISOString().replace("T", " ").split(".")[0],
     };
