@@ -1,11 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useContext } from 'react';
 import ChatBubble from '../ChatBubble/ChatBubble';
 import ChipSelector from '../ChipSelector/ChipSelector';
 import MusicPlayer from '../MusicPlayer/MusicPlayer';
+import { AnalyzeContext } from '../../context/AnalyzeContext';
 import styles from './ChatInterface.module.css';
-// import axiosInstance from '../../services/api'; // Uncomment when backend is ready
 
 const ChatInterface = () => {
+  // Use AnalyzeContext for backend API calls
+  const { analyzeMessage, response: analyzeResponse, loading: analyzeLoading, error: analyzeError } = useContext(AnalyzeContext);
+  
   // State for managing messages in the chat
   const [messages, setMessages] = useState([]);
   
@@ -14,9 +17,6 @@ const ChatInterface = () => {
   
   // Store all user answers in an object
   const [userData, setUserData] = useState({});
-  
-  // Track if we're waiting for backend response
-  const [isLoading, setIsLoading] = useState(false);
   
   // Control whether to show chip buttons or text input
   const [showChips, setShowChips] = useState(false);
@@ -30,56 +30,44 @@ const ChatInterface = () => {
   // Track if we're in the follow-up phase (after initial response)
   const [showFollowUp, setShowFollowUp] = useState(false);
   
-  // Store severity from backend (for resource selection)
-  // eslint-disable-next-line no-unused-vars
-  const [severity, setSeverity] = useState(null); // Stored for potential future use
-  
   // Reference to scroll to bottom of chat
   const messagesEndRef = useRef(null);
 
-  // Define all questions we want to ask
+  // Define all questions we want to ask - MATCHED TO BACKEND REQUIREMENTS
   const questions = [
     {
-      text: "שלום! אני כאן כדי לעזור לך. בואי נתחיל - איך את מרגישה עכשיו? (אפשר לבחור כמה רגשות)",
+      text: "שלום! אני כאן כדי לעזור לך. בואי נתחיל - איך את מרגישה עכשיו?",
       type: "chips",
-      key: "feelings",  // Changed to plural - will be an array
-      multiple: true,  // Allow multiple selection
+      key: "feeling",  // Single feeling (not array) - matches backend context.feeling
+      multiple: false,  // Single selection - backend expects string, not array
       options: ["מבולבלת", "פחד", "עצב", "כעס", "חרדה", "תקווה", "אחר"]
     },
     {
-      text: "מה קרה? ספרי לי בקצרה על האירוע שחווית.",
-      type: "text",  // User will type their answer
-      key: "incident"
+      text: "מה קרה? ספרי לי בקצרה על האירוע או ההודעה שקיבלת.",
+      type: "text",  // User will type their answer - maps to messageText
+      key: "messageText"  // Matches backend messageText
     },
     {
       text: "איפה זה קרה?",
       type: "chips",
-      key: "location",
-      options: ["רשתות חברתיות", "אפליקציות הודעות", "אתר אינטרנט", "משחקים מקוונים", "אחר"]
+      key: "channel",  // Maps to backend context.channel
+      options: [
+        { label: "שיחה פרטית", value: "private" },
+        { label: "קבוצה/צ'אט קבוצתי", value: "group" }
+      ]
     },
     {
-      text: "האם את רוצה שנעזור לך לטפל בזה?",
+      text: "מי שלח את ההודעה?",
       type: "chips",
-      key: "wantsHelp",
-      options: ["כן, אני רוצה עזרה", "אני לא בטוחה", "לא כרגע"]
+      key: "senderType",  // Maps to backend context.senderType
+      options: [
+        { label: "מישהו שאני לא מכירה", value: "stranger" },
+        { label: "מישהו שאני מכירה", value: "known" }
+      ]
     }
   ];
 
-  // Resource options based on severity
-  const resourceOptions = {
-    mild: [
-      "עזרה עצמית - טכניקות הרגעה",
-      "משאבים מקוונים",
-      "קהילת תמיכה",
-      "טיפים להתמודדות"
-    ],
-    severe: [
-      "עזרה מקצועית - פניה למטפל",
-      "קווי חירום",
-      "תמיכה מיידית",
-      "ליווי מקצועי"
-    ]
-  };
+  // Resource options will come from backend replyOptions
 
   // Auto-scroll to bottom when new messages appear
   const scrollToBottom = () => {
@@ -92,10 +80,14 @@ const ChatInterface = () => {
 
   // Initialize chat with welcome message when component loads
   useEffect(() => {
-    const welcomeMessage = "שלום! אני כאן כדי לעזור לך. בואי נתחיל - איך את מרגישה עכשיו? (אפשר לבחור כמה רגשות)";
+    const welcomeMessage = questions[0].text;
     setMessages([{ text: welcomeMessage, isUser: false }]);
     setShowChips(true);
-    setCurrentOptions(questions[0].options);
+    // Handle both string arrays and object arrays
+    const firstQuestionOptions = questions[0].options.map(opt => 
+      typeof opt === 'string' ? opt : opt.label
+    );
+    setCurrentOptions(firstQuestionOptions);
     setAllowMultipleSelection(questions[0].multiple || false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // questions is stable, no need to include in deps
@@ -120,12 +112,17 @@ const ChatInterface = () => {
   const handleChipSelect = (value) => {
     const currentQuestion = questions[currentQuestionIndex];
     
-    // Save the selected value in userData
-    setUserData(prev => ({ ...prev, [currentQuestion.key]: value }));
+    // Find the option object if it exists (for label/value pairs)
+    const optionObj = currentQuestion.options.find(opt => 
+      typeof opt === 'object' ? (opt.label === value || opt.value === value) : opt === value
+    );
+    
+    // Save the actual value (value property if object, otherwise the string)
+    const actualValue = typeof optionObj === 'object' ? optionObj.value : value;
+    setUserData(prev => ({ ...prev, [currentQuestion.key]: actualValue }));
 
-    // Show user's selection as a message
-    // For multiple selection, show array as comma-separated
-    const displayText = Array.isArray(value) ? value.join(', ') : value;
+    // Show user's selection as a message (display label if object, otherwise value)
+    const displayText = typeof optionObj === 'object' ? optionObj.label : value;
     const userMessage = { text: displayText, isUser: true };
     setMessages(prev => [...prev, userMessage]);
     
@@ -159,7 +156,11 @@ const ChatInterface = () => {
         
         // If next question uses chips, show them
         if (nextQuestion.type === "chips") {
-          setCurrentOptions(nextQuestion.options);
+          // Handle both string arrays and object arrays
+          const chipOptions = nextQuestion.options.map(opt => 
+            typeof opt === 'string' ? opt : opt.label
+          );
+          setCurrentOptions(chipOptions);
           setShowChips(true);
           setAllowMultipleSelection(nextQuestion.multiple || false);
         } else {
@@ -172,91 +173,30 @@ const ChatInterface = () => {
     }
   };
 
-  // Send collected data to backend
+  // Send collected data to backend using AnalyzeContext
   const submitData = async () => {
-    setIsLoading(true);
     setShowChips(false);
     
     // Show loading message
     setMessages(prev => [...prev, { text: "אני מעבדת את המידע שלך...", isUser: false, isTyping: true }]);
 
-    // ============================================
-    // TEMPORARY MOCK FOR TESTING - REMOVE WHEN BACKEND IS READY
-    // ============================================
-    // TODO: Replace this mock with actual backend call:
-    // const response = await axiosInstance.post('/incidents', userData);
-    
-    // Simulate backend delay (like real API call)
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Remove typing indicator
-    setMessages(prev => prev.filter(msg => !msg.isTyping));
-    
-    // MOCK RESPONSE - This is temporary for testing UI
-    // In real backend, severity will be calculated based on userData
-    // Backend should return: { success: true, severity: "mild"|"severe", message: "..." }
-    
-    // Simulate severity assessment (backend will do this properly)
-    const feelings = Array.isArray(userData.feelings) ? userData.feelings : [];
-    const severeFeelings = ["פחד", "חרדה", "כעס"];
-    const hasSevereFeeling = feelings.some(f => severeFeelings.includes(f));
-    const mockSeverity = hasSevereFeeling ? "severe" : "mild";
-    
-    // Create contextual response based on severity (subtle signals - not showing severity directly)
-    let severitySignal = "";
-    if (mockSeverity === "severe") {
-      severitySignal = "אני רואה שזה משפיע עלייך מאוד. חשוב שתדעי שיש עזרה מקצועית זמינה עבורך.";
-    } else {
-      severitySignal = "יש לך כלים להתמודד עם זה, ואנחנו כאן כדי לתמוך בך.";
-    }
-    
-    const mockResponse = {
-      data: {
-        success: true,
-        severity: mockSeverity,  // Backend should return this (not shown to user directly)
-        message: `[MOCK RESPONSE - FOR TESTING ONLY] תודה ששיתפת אותי. זה לא קל לדבר על דברים כאלה, ואני גאה בך שהגעת לכאן. ${severitySignal} מה שקרה לך לא בסדר, ואת לא אשמה. בואי נחשוב יחד על דרכים להתמודד עם זה. יש לך תמיכה כאן. זכרי - את לא לבד.`
-      }
-    };
-    
-    // Extract severity from response (backend will provide this)
-    const responseSeverity = mockResponse.data.severity || mockSeverity;
-    setSeverity(responseSeverity);
-    
-    // Display mock response in chunks
-    if (mockResponse.data && mockResponse.data.message) {
-      await displayResponseInChunks(mockResponse.data.message);
-    }
-    
-    // After response, show follow-up with music and resources
-    await showFollowUpResources(responseSeverity);
-    
-    setIsLoading(false);
-    
-    // ============================================
-    // END OF TEMPORARY MOCK
-    // ============================================
-    
-    /* ORIGINAL BACKEND CODE (commented out for now):
     try {
-      // Send userData to backend endpoint
-      const response = await axiosInstance.post('/incidents', userData);
+      // Prepare request body matching backend API structure
+      const requestBody = {
+        messageText: userData.messageText,  // The incident text
+        context: {
+          channel: userData.channel,  // "private" or "group"
+          senderType: userData.senderType,  // "stranger" or "known"
+          feeling: userData.feeling  // Single feeling string
+        }
+      };
+
+      // Call backend API using AnalyzeContext
+      await analyzeMessage(requestBody);
       
-      // Remove typing indicator
-      setMessages(prev => prev.filter(msg => !msg.isTyping));
+      // Wait for response (analyzeLoading will be false when done)
+      // The response will be in analyzeResponse
       
-      // Extract severity from backend response (backend calculates this)
-      const responseSeverity = response.data?.severity || "mild";
-      setSeverity(responseSeverity);
-      
-      // If backend returns a message, display it in chunks
-      if (response.data && response.data.message) {
-        await displayResponseInChunks(response.data.message);
-      }
-      
-      // After response, show follow-up with music and resources
-      const feelings = Array.isArray(userData.feelings) ? userData.feelings : [];
-      const primaryFeeling = feelings[0] || "אחר";
-      await showFollowUpResources(responseSeverity, primaryFeeling);
     } catch (error) {
       console.error('Error submitting data:', error);
       // Remove typing indicator and show error
@@ -264,11 +204,55 @@ const ChatInterface = () => {
         const filtered = prev.filter(msg => !msg.isTyping);
         return [...filtered, { text: "סליחה, הייתה שגיאה. נסי שוב מאוחר יותר.", isUser: false }];
       });
-    } finally {
-      setIsLoading(false);
     }
-    */
   };
+
+  // Handle backend response when it arrives
+  useEffect(() => {
+    if (analyzeResponse && !analyzeLoading) {
+      // Remove typing indicator
+      setMessages(prev => prev.filter(msg => !msg.isTyping));
+      
+      // Backend returns: { riskLevel, category, explanation, replyOptions, supportLine }
+      const { riskLevel, explanation, replyOptions, supportLine } = analyzeResponse;
+      
+      // Map riskLevel to severity for resource selection
+      // High/Medium = severe, Low = mild
+      const severity = (riskLevel === "High" || riskLevel === "Medium") ? "severe" : "mild";
+      
+      // Display explanation as main response
+      if (explanation) {
+        displayResponseInChunks(explanation).then(() => {
+          // Show support line after explanation
+          if (supportLine) {
+            setTimeout(async () => {
+              await displayResponseInChunks(supportLine);
+              // After response, show follow-up with music and reply options
+              await showFollowUpResources(severity, replyOptions);
+            }, 2000);
+          } else {
+            // If no supportLine, still show follow-up
+            setTimeout(async () => {
+              await showFollowUpResources(severity, replyOptions);
+            }, 2000);
+          }
+        });
+      } else {
+        // If no explanation, show follow-up directly
+        setTimeout(async () => {
+          await showFollowUpResources(severity, replyOptions);
+        }, 1000);
+      }
+    }
+    
+    if (analyzeError) {
+      setMessages(prev => {
+        const filtered = prev.filter(msg => !msg.isTyping);
+        return [...filtered, { text: "סליחה, הייתה שגיאה. נסי שוב מאוחר יותר.", isUser: false }];
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analyzeResponse, analyzeLoading, analyzeError]); // displayResponseInChunks and showFollowUpResources are stable
 
   // Display backend response in chunks to simulate live chat
   const displayResponseInChunks = async (fullResponse) => {
@@ -285,22 +269,32 @@ const ChatInterface = () => {
     }
   };
 
-  // Show follow-up with music and resources
-  const showFollowUpResources = async (severityLevel) => {
+  // Show follow-up with music and resources (replyOptions from backend)
+  const showFollowUpResources = async (severityLevel, replyOptions) => {
     // Wait a bit after the response
     await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // Show message about resources
+    // Show message about reply options
     setMessages(prev => [...prev, { 
-      text: "בואי נחשוב יחד על מה שיכול לעזור לך. יש כאן כמה אפשרויות:", 
+      text: "בואי נחשוב יחד על איך להגיב. יש כאן כמה אפשרויות:", 
       isUser: false 
     }]);
     
     // Enable follow-up phase
     setShowFollowUp(true);
-    setCurrentOptions(resourceOptions[severityLevel] || resourceOptions.mild);
-    setShowChips(true);
-    setAllowMultipleSelection(false);
+    
+    // Convert replyOptions object to array of options
+    if (replyOptions) {
+      const options = [
+        { label: `תגובה עדינה: ${replyOptions.gentle}`, value: "gentle" },
+        { label: `תגובה תקיפה: ${replyOptions.assertive}`, value: "assertive" },
+        { label: `לא להגיב: ${replyOptions.noReply}`, value: "noReply" }
+      ];
+      const chipOptions = options.map(opt => opt.label);
+      setCurrentOptions(chipOptions);
+      setShowChips(true);
+      setAllowMultipleSelection(false);
+    }
   };
 
   // Handle resource selection
@@ -333,7 +327,7 @@ const ChatInterface = () => {
 
   // Determine what to show: text input or chips
   const currentQuestion = questions[currentQuestionIndex];
-  const showTextInput = currentQuestion && currentQuestion.type === "text" && !isLoading;
+  const showTextInput = currentQuestion && currentQuestion.type === "text" && !analyzeLoading;
 
   return (
     <div className={styles.chatContainer}>
@@ -371,8 +365,8 @@ const ChatInterface = () => {
         )}
 
         {/* Show music player in follow-up phase */}
-        {showFollowUp && userData.feelings && Array.isArray(userData.feelings) && userData.feelings.length > 0 && (
-          <MusicPlayer feeling={userData.feelings[0]} />
+        {showFollowUp && userData.feeling && (
+          <MusicPlayer feeling={userData.feeling} />
         )}
         
         {/* Invisible element to scroll to */}
@@ -389,7 +383,7 @@ const ChatInterface = () => {
             onKeyPress={handleInputKeyPress}
             placeholder="כתבי כאן..."
             className={styles.textInput}
-            disabled={isLoading}
+            disabled={analyzeLoading}
           />
           <button
             onClick={() => {
@@ -397,7 +391,7 @@ const ChatInterface = () => {
               setInputText('');
             }}
             className={styles.sendButton}
-            disabled={isLoading || !inputText.trim()}
+            disabled={analyzeLoading || !inputText.trim()}
           >
             שלחי
           </button>
