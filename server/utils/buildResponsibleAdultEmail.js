@@ -21,7 +21,7 @@ ${analysisResults.supportLine}
 הודעה זו נשלחה בהסכמת המשתמשת כחלק ממנגנון בטיחות.
 
 בברכה,  
-BeSafe
+My Digital Sister
 `.trim();
 
     return { subject, body };

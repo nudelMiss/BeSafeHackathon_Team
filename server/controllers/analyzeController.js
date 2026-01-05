@@ -1,5 +1,6 @@
 import { getOpenAIClient } from "./openAI.js";
 import {buildResponsibleAdultEmail} from "../utils/buildResponsibleAdultEmail.js";
+import {sendResponsibleAdultEmail} from "../services/ResponsibleAdultEmailService.js";
 
 export const analyzeMessage = async (req, res) => {
   try {
@@ -84,7 +85,8 @@ ${JSON.stringify(context)}
 
       if (shouldReport) {
           const emailContent = buildResponsibleAdultEmail(parsed);
-          report = {sent : true, emailContent: emailContent} ;
+          await sendResponsibleAdultEmail(ResponsibleAdultEmail, emailContent.body)
+          report = {sent : true} ;
       }
 
       return res.status(200).json({...parsed, report});

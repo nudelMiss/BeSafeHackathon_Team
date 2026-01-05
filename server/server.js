@@ -10,6 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 dotenv.config();
+console.log("ENV CHECK:", process.env.EMAIL_USER, process.env.EMAIL_PASS);
 
 const app = express();
 
