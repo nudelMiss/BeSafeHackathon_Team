@@ -1,0 +1,37 @@
+.chipContainer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+  margin-bottom: 12px;
+}
+
+.chip {
+  padding: 10px 20px;
+  border-radius: 25px;
+  border: 2px solid #ffb3d1;
+  background-color: #ffffff;
+  color: #333;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.chip:hover {
+  background-color: #ffe6f0;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(255, 179, 209, 0.3);
+}
+
+.chip.selected {
+  background-color: #ffb3d1;
+  color: #fff;
+  border-color: #ff99c8;
+  font-weight: 500;
+}
+
+.chip:active {
+  transform: translateY(0);
+}
+
