@@ -36,10 +36,15 @@ const ChatInterface = () => {
   // Define all questions we want to ask - MATCHED TO BACKEND REQUIREMENTS
   const questions = [
     {
-      text: "שלום! אני כאן כדי לעזור לך. בואי נתחיל - איך את מרגישה עכשיו?",
+      text: "שלום! אני כאן כדי לעזור לך. בואי נתחיל - איך את רוצה להיקרא? (כינוי)",
+      type: "text",  // User will type their nickname
+      key: "nickname"  // Required by backend
+    },
+    {
+      text: "איך את מרגישה עכשיו? (אפשר לבחור כמה רגשות)",
       type: "chips",
-      key: "feeling",  // Single feeling (not array) - matches backend context.feeling
-      multiple: false,  // Single selection - backend expects string, not array
+      key: "feelings",  // Array of feelings - matches backend context.feelings
+      multiple: true,  // Multiple selection - backend expects array
       options: ["מבולבלת", "פחד", "עצב", "כעס", "חרדה", "תקווה", "אחר"]
     },
     {
@@ -50,19 +55,19 @@ const ChatInterface = () => {
     {
       text: "איפה זה קרה?",
       type: "chips",
-      key: "channel",  // Maps to backend context.channel
+      key: "channel",  // Maps to backend context.channel (Hebrew values)
       options: [
-        { label: "שיחה פרטית", value: "private" },
-        { label: "קבוצה/צ'אט קבוצתי", value: "group" }
+        { label: "שיחה פרטית", value: "פרטי" },
+        { label: "קבוצה/צ'אט קבוצתי", value: "קבוצה" }
       ]
     },
     {
       text: "מי שלח את ההודעה?",
       type: "chips",
-      key: "senderType",  // Maps to backend context.senderType
+      key: "senderType",  // Maps to backend context.senderType (Hebrew values)
       options: [
-        { label: "מישהו שאני לא מכירה", value: "stranger" },
-        { label: "מישהו שאני מכירה", value: "known" }
+        { label: "מישהו שאני לא מכירה", value: "זר" },
+        { label: "מישהו שאני מכירה", value: "מוכר" }
       ]
     }
   ];
@@ -82,13 +87,9 @@ const ChatInterface = () => {
   useEffect(() => {
     const welcomeMessage = questions[0].text;
     setMessages([{ text: welcomeMessage, isUser: false }]);
-    setShowChips(true);
-    // Handle both string arrays and object arrays
-    const firstQuestionOptions = questions[0].options.map(opt => 
-      typeof opt === 'string' ? opt : opt.label
-    );
-    setCurrentOptions(firstQuestionOptions);
-    setAllowMultipleSelection(questions[0].multiple || false);
+    // First question is text input (nickname), not chips
+    setShowChips(false);
+    setAllowMultipleSelection(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // questions is stable, no need to include in deps
 
@@ -117,22 +118,51 @@ const ChatInterface = () => {
       typeof opt === 'object' ? (opt.label === value || opt.value === value) : opt === value
     );
     
-    // Save the actual value (value property if object, otherwise the string)
-    const actualValue = typeof optionObj === 'object' ? optionObj.value : value;
-    setUserData(prev => ({ ...prev, [currentQuestion.key]: actualValue }));
+    // For multiple selection (feelings array)
+    if (currentQuestion.multiple) {
+      const currentSelections = Array.isArray(userData[currentQuestion.key]) 
+        ? userData[currentQuestion.key] 
+        : [];
+      const actualValue = typeof optionObj === 'object' ? optionObj.value : value;
+      const isSelected = currentSelections.includes(actualValue);
+      
+      let newSelections;
+      if (isSelected) {
+        // Remove from selection
+        newSelections = currentSelections.filter(item => item !== actualValue);
+      } else {
+        // Add to selection
+        newSelections = [...currentSelections, actualValue];
+      }
+      
+      setUserData(prev => ({ ...prev, [currentQuestion.key]: newSelections }));
+      
+      // Show updated selection as message
+      const displayText = newSelections.length > 0 
+        ? newSelections.join(', ') 
+        : 'לא נבחר';
+      const userMessage = { text: displayText, isUser: true };
+      setMessages(prev => {
+        // Remove previous selection message if exists, add new one
+        const filtered = prev.filter((msg, idx) => 
+          !(msg.isUser && idx === prev.length - 1 && prev.length > 1)
+        );
+        return [...filtered, userMessage];
+      });
+    } else {
+      // Single selection (channel, senderType)
+      const actualValue = typeof optionObj === 'object' ? optionObj.value : value;
+      setUserData(prev => ({ ...prev, [currentQuestion.key]: actualValue }));
 
-    // Show user's selection as a message (display label if object, otherwise value)
-    const displayText = typeof optionObj === 'object' ? optionObj.label : value;
-    const userMessage = { text: displayText, isUser: true };
-    setMessages(prev => [...prev, userMessage]);
-    
-    // For single selection, hide chips and move to next question
-    // For multiple selection, keep chips visible until user is done
-    if (!currentQuestion.multiple) {
+      // Show user's selection as a message (display label if object, otherwise value)
+      const displayText = typeof optionObj === 'object' ? optionObj.label : value;
+      const userMessage = { text: displayText, isUser: true };
+      setMessages(prev => [...prev, userMessage]);
+      
+      // Hide chips and move to next question
       setShowChips(false);
       moveToNextQuestion();
     }
-    // If multiple selection, chips stay visible - user can add more or we wait for "done" button
   };
 
   // Handle when user is done with multiple selection
@@ -183,11 +213,12 @@ const ChatInterface = () => {
     try {
       // Prepare request body matching backend API structure
       const requestBody = {
+        nickname: userData.nickname,  // Required by backend
         messageText: userData.messageText,  // The incident text
         context: {
-          channel: userData.channel,  // "private" or "group"
-          senderType: userData.senderType,  // "stranger" or "known"
-          feeling: userData.feeling  // Single feeling string
+          channel: userData.channel,  // "פרטי" or "קבוצה" (Hebrew)
+          senderType: userData.senderType,  // "זר" or "מוכר" (Hebrew)
+          feelings: Array.isArray(userData.feelings) ? userData.feelings : []  // Array of feelings (Hebrew)
         }
       };
 
@@ -213,12 +244,13 @@ const ChatInterface = () => {
       // Remove typing indicator
       setMessages(prev => prev.filter(msg => !msg.isTyping));
       
-      // Backend returns: { riskLevel, category, explanation, replyOptions, supportLine }
+      // Backend returns: { riskLevel, category, explanation, replyOptions, supportLine, userId, nickname, reportId, createdAt }
       const { riskLevel, explanation, replyOptions, supportLine } = analyzeResponse;
       
       // Map riskLevel to severity for resource selection
+      // Backend returns Hebrew: "גבוה"/"בינוני"/"נמוך"
       // High/Medium = severe, Low = mild
-      const severity = (riskLevel === "High" || riskLevel === "Medium") ? "severe" : "mild";
+      const severity = (riskLevel === "גבוה" || riskLevel === "בינוני") ? "severe" : "mild";
       
       // Display explanation as main response
       if (explanation) {
@@ -365,8 +397,8 @@ const ChatInterface = () => {
         )}
 
         {/* Show music player in follow-up phase */}
-        {showFollowUp && userData.feeling && (
-          <MusicPlayer feeling={userData.feeling} />
+        {showFollowUp && userData.feelings && Array.isArray(userData.feelings) && userData.feelings.length > 0 && (
+          <MusicPlayer feeling={userData.feelings[0]} />
         )}
         
         {/* Invisible element to scroll to */}
