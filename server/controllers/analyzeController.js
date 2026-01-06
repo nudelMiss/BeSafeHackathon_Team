@@ -84,9 +84,14 @@ ${JSON.stringify(context)}
       const shouldReport = ResponsibleAdultEmail && parsed.riskLevel === "High";
 
       if (shouldReport) {
-          const emailContent = buildResponsibleAdultEmail(parsed);
-          await sendResponsibleAdultEmail(ResponsibleAdultEmail, emailContent.body)
-          report = {sent : true} ;
+          try {
+              const emailContent = buildResponsibleAdultEmail(parsed, context.nickName || "המשתמשת");
+              await sendResponsibleAdultEmail(ResponsibleAdultEmail, emailContent.body)
+              report = {sent : true} ;
+          } catch (error) {
+              console.error("Failed to send responsible adult email: " , error);
+              report = { sent: false, error: error.message };
+          }
       }
 
       return res.status(200).json({...parsed, report});

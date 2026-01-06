@@ -1,11 +1,11 @@
 
-export function buildResponsibleAdultEmail(analysisResults) {
+export function buildResponsibleAdultEmail(analysisResults, userName) {
     const subject = "BeSafe – התראה בטיחותית בנוגע למשתמשת";
 
     const body = `
-שלום,
+שלום רב,
 
-הודעה זו נשלחה אליך בעקבות זיהוי אוטומטי של תוכן שעלול להצביע על סיכון למשתמשת בהקשר של בטיחות ברשת.
+הודעה זו נשלחה אליך בעקבות זיהוי אוטומטי של תוכן שעלול להצביע על סיכון ל${userName} בהקשר של בטיחות ברשת.
 
 רמת סיכון: ${analysisResults.riskLevel}
 קטגוריה: ${analysisResults.category}
@@ -13,15 +13,15 @@ export function buildResponsibleAdultEmail(analysisResults) {
 הסבר:
 ${analysisResults.explanation}
 
-המלצה כללית:
+המלצה:
 ${analysisResults.supportLine}
 
-מומלץ לשוחח עם המשתמשת ולבחון האם נדרשת פנייה לגורם מקצועי או מבוגר אחראי נוסף.
+מומלץ לשוחח עם ${userName} ולבחון האם נדרשת פנייה לגורם מקצועי או מבוגר אחראי נוסף.
 
-הודעה זו נשלחה בהסכמת המשתמשת כחלק ממנגנון בטיחות.
+הודעה זו נשלחה בהסכמת ${userName} כחלק ממנגנון בטיחות.
 
 בברכה,  
-My Digital Sister
+צוות My Digital Sister
 `.trim();
 
     return { subject, body };
