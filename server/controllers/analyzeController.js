@@ -5,10 +5,12 @@ import {
   getReportsByUser,
   getOrCreateUserByNickname,
 } from "../services/reportStore.js";
+import {buildResponsibleAdultEmail} from "../utils/buildResponsibleAdultEmail.js";
+import {sendResponsibleAdultEmail} from "../services/ResponsibleAdultEmailService.js";
 
 export const analyzeMessage = async (req, res) => {
   try {
-    const { nickname, messageText, context } = req.body;
+    const { nickname, messageText, context, ResponsibleAdultEmail } = req.body;
 
     if (!messageText || !context) {
       return res.status(400).json({ responseText: "חסר messageText או context" });
@@ -156,6 +158,21 @@ userHistorySummary:
       });
     }
 
+
+      let emailReport = null;
+      const shouldReport = ResponsibleAdultEmail && parsed.riskLevel === "High";
+
+      if (shouldReport) {
+          try {
+              const emailContent = buildResponsibleAdultEmail(parsed, user.nickname || "המשתמשת");
+              await sendResponsibleAdultEmail(ResponsibleAdultEmail, emailContent.body)
+              emailReport = {sent : true} ;
+          } catch (error) {
+              console.error("Failed to send responsible adult email: " , error);
+              emailReport = { sent: false, error: error.message };
+          }
+      }
+    
     const report = {
       id: crypto.randomUUID(),
       userId: user.id,
@@ -178,7 +195,9 @@ userHistorySummary:
       nickname: user.nickname,
       reportId: report.id,
       createdAt: report.createdAt,
+      emailReport,
     });
+
   } catch (error) {
     console.error("Analyze error:", error);
     return res.status(500).json({

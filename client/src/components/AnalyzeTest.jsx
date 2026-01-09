@@ -11,6 +11,7 @@ const AnalyzeTest = () => {
             senderType: "stranger",
             feeling: "uncomfortable",
         },
+        ResponsibleAdultEmail: "yuvalh6200@gmail.com"
     };
 
     return (
