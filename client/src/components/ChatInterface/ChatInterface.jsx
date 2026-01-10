@@ -33,6 +33,7 @@ const ChatInterface = () => {
   const [isParentConsentPrompt, setIsParentConsentPrompt] = useState(false);
   const [isToneSelection, setIsToneSelection] = useState(false);
   const [replyOptionsData, setReplyOptionsData] = useState(null);
+  const [isWaitingForEmailInput, setIsWaitingForEmailInput] = useState(false);
   
   // Store severity from backend (for resource selection)
   // eslint-disable-next-line no-unused-vars
@@ -83,9 +84,11 @@ const ChatInterface = () => {
       options: ["מישהו שאני מכירה", "זר"]
     },
     {
-      text: "אם יש דבר שמעורר דאגה, אנחנו אולי נרצה ליצור קשר עם מבוגר אחראי שנוכל לסמוך עליו. מה הדוא״ל של הורה, מורה, או מישהו אחר בעל אחריות שאת סומכת עליו? (נשאל אותך לאישור לפני שנשלח מייל במידת הצורך)",
-      type: "text",
-      key: "trustedAdultEmail"
+      text: "אם יש דבר שמעורר דאגה, אנחנו אולי נרצה ליצור קשר עם מבוגר אחראי שנוכל לסמוך עליו.",
+      type: "chips",
+      key: "trustedAdultEmail",
+      multiple: false,
+      options: ["אזין מייל של מבוגר אחראי", "מעדיפה לא לתת מייל"]
     }
   ];
 
@@ -132,6 +135,14 @@ const ChatInterface = () => {
     const userMessage = { text: text.trim(), isUser: true };
     setMessages(prev => [...prev, userMessage]);
     
+    // If we were waiting for email input, handle it specially
+    if (isWaitingForEmailInput) {
+      setUserData(prev => ({ ...prev, trustedAdultEmail: text.trim() }));
+      setIsWaitingForEmailInput(false);
+      moveToNextQuestion('trustedAdultEmail', text.trim());
+      return;
+    }
+    
     // Save the answer in userData object
     const currentQuestion = questions[currentQuestionIndex];
     console.log('Saving text input - Question:', currentQuestion.text, 'Key:', currentQuestion.key, 'Value:', text.trim());
@@ -147,6 +158,29 @@ const ChatInterface = () => {
 
   // Handle when user clicks a chip
   const handleChipSelect = (value) => {
+    const currentQuestion = questions[currentQuestionIndex];
+    
+    // Handle email question chip selection
+    if (currentQuestion.key === 'trustedAdultEmail') {
+      const displayText = Array.isArray(value) ? value.join(', ') : value;
+      setMessages(prev => [...prev, { text: displayText, isUser: true }]);
+      
+      if (value === "מעדיפה לא לתת מייל") {
+        // User chose not to provide email
+        setUserData(prev => ({ ...prev, trustedAdultEmail: "" }));
+        setShowChips(false);
+        moveToNextQuestion('trustedAdultEmail', "");
+      } else {
+        // User wants to enter email - show text input
+        setShowChips(false);
+        setIsWaitingForEmailInput(true);
+        setTimeout(() => {
+          setMessages(prev => [...prev, { text: "אוקיי, הזיני את המייל:", isUser: false }]);
+        }, 500);
+      }
+      return;
+    }
+    
     // Parent consent prompt flow (high-risk)
     if (isParentConsentPrompt) {
       const displayText = Array.isArray(value) ? value.join(', ') : value;
@@ -174,26 +208,47 @@ const ChatInterface = () => {
         "לא להגיב": "noReply",
       };
       const selectedKey = toneKeyByLabel[value];
-      const replyText = replyOptionsData?.[selectedKey] || value;
+      const replyText = replyOptionsData?.[selectedKey];
 
       // Show user's choice
       setMessages(prev => [...prev, { text: value, isUser: true }]);
 
-      // Show suggested reply from server
-      if (replyText) {
-        setMessages(prev => [...prev, { text: replyText, isUser: false }]);
+      // Clear any lingering email input state
+      setIsWaitingForEmailInput(false);
+      
+      // Show suggested reply from server with a delay
+      if (replyText && selectedKey !== "noReply") {
+        setTimeout(() => {
+          setMessages(prev => [...prev, { 
+            text: replyText, 
+            isUser: false 
+          }]);
+          // After showing the reply, proceed to follow-up resources
+          setTimeout(() => {
+            showFollowUpResources(severityRef.current);
+          }, 1000);
+        }, 500);
+      } else if (selectedKey === "noReply") {
+        // If user chose not to reply, show acknowledgment and proceed
+        setTimeout(() => {
+          setMessages(prev => [...prev, { 
+            text: "הבנתי, זה בסדר גמור לא להגיב.", 
+            isUser: false 
+          }]);
+          setTimeout(() => {
+            showFollowUpResources(severityRef.current);
+          }, 1000);
+        }, 500);
+      } else {
+        // If no reply text available, proceed directly
+        showFollowUpResources(severityRef.current);
       }
 
       setIsToneSelection(false);
       setShowChips(false);
-
-      // After tone selection, proceed to follow-up resources
-      showFollowUpResources(severityRef.current);
       return;
     }
 
-    const currentQuestion = questions[currentQuestionIndex];
-    
     // Save the selected value in userData
     setUserData(prev => ({ ...prev, [currentQuestion.key]: value }));
 
@@ -376,26 +431,10 @@ const ChatInterface = () => {
       }
       
       // ==========================================
-      // CHECK IF HIGH RISK - ASK FOR PARENT NOTIFICATION
+      // PROCEED TO TONE SELECTION
       // ==========================================
-      if (isHighRisk) {
-        // Wait a bit before asking
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        setMessages(prev => [...prev, { 
-          text: "זה נראה כמו מקרה חמור. האם זה בסדר אם נצור קשר עם מבוגר אחראי כדי לעזור לך?", 
-          isUser: false 
-        }]);
-        
-        // Show yes/no options for parent notification
-        setCurrentOptions(["כן, אנא צרו קשר עם הורה/מבוגר", "לא, אל תצרו קשר"]);
-        setShowChips(true);
-        setAllowMultipleSelection(false);
-        setIsParentConsentPrompt(true);
-      } else {
-        // Proceed directly to tone selection
-        await startToneSelection(response.data?.replyOptions);
-      }
+      // Proceed directly to tone selection
+      await startToneSelection(response.data?.replyOptions);
     } catch (error) {
       console.error('❌ Error submitting data:', error);
       console.error('Error type:', error.constructor.name);
@@ -482,7 +521,7 @@ const ChatInterface = () => {
 
   // Determine what to show: text input or chips
   const currentQuestion = questions[currentQuestionIndex];
-  const showTextInput = currentQuestion && currentQuestion.type === "text" && !isLoading;
+  const showTextInput = !showFollowUp && !isToneSelection && ((currentQuestion && currentQuestion.type === "text" && !isLoading) || isWaitingForEmailInput);
 
   return (
     <div className={styles.chatContainer}>
