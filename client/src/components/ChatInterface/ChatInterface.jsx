@@ -4,6 +4,7 @@ import ChipSelector from '../ChipSelector/ChipSelector';
 import MusicPlayer from '../MusicPlayer/MusicPlayer';
 import { AnalyzeContext } from '../../context/AnalyzeContext';
 import styles from './ChatInterface.module.css';
+import axiosInstance from '../../services/api';
 
 const ChatInterface = () => {
   // Use AnalyzeContext for backend API calls
@@ -29,6 +30,16 @@ const ChatInterface = () => {
   
   // Track if we're in the follow-up phase (after initial response)
   const [showFollowUp, setShowFollowUp] = useState(false);
+  // Track special interaction modes
+  const [isParentConsentPrompt, setIsParentConsentPrompt] = useState(false);
+  const [isToneSelection, setIsToneSelection] = useState(false);
+  const [replyOptionsData, setReplyOptionsData] = useState(null);
+  const [isWaitingForEmailInput, setIsWaitingForEmailInput] = useState(false);
+  
+  // Store severity from backend (for resource selection)
+  // eslint-disable-next-line no-unused-vars
+  const [severity, setSeverity] = useState(null); // Stored for potential future use
+  const severityRef = useRef('mild');
   
   // Reference to scroll to bottom of chat
   const messagesEndRef = useRef(null);
@@ -36,43 +47,67 @@ const ChatInterface = () => {
   // Define all questions we want to ask - MATCHED TO BACKEND REQUIREMENTS
   const questions = [
     {
-      text: "שלום! אני כאן כדי לעזור לך. בואי נתחיל - איך את רוצה להיקרא? (כינוי)",
-      type: "text",  // User will type their nickname
-      key: "nickname"  // Required by backend
-    },
-    {
-      text: "איך את מרגישה עכשיו? (אפשר לבחור כמה רגשות)",
+      text: "שלום, אני האחות הדיגיטלית שלך ברשת. אני כאן כדי לעזור לך להתמודד עם אירועים לא נעימים שחווית ברשת. אני שמחה שהחלטת לפנות אליי, בואי ננסה להבין מה קרה.",
       type: "chips",
-      key: "feelings",  // Array of feelings - matches backend context.feelings
-      multiple: true,  // Multiple selection - backend expects array
-      options: ["מבולבלת", "פחד", "עצב", "כעס", "חרדה", "תקווה", "אחר"]
+      key: "openingAck",
+      multiple: false,
+      options: ["אוקי, בואי נתחיל"]
     },
     {
-      text: "מה קרה? ספרי לי בקצרה על האירוע או ההודעה שקיבלת.",
-      type: "text",  // User will type their answer - maps to messageText
-      key: "messageText"  // Matches backend messageText
+      text: "איך היית רוצה שאני אקרא לך? את יכולה לתת את השם שלך או כל כינוי שתבחרי.",
+      type: "text",
+      key: "userIdentifier"
     },
     {
-      text: "איפה זה קרה?",
+      text: "שלום! אני כאן כדי לעזור לך. בואי נתחיל - איך את מרגישה עכשיו?",
       type: "chips",
-      key: "channel",  // Maps to backend context.channel (Hebrew values)
-      options: [
-        { label: "שיחה פרטית", value: "פרטי" },
-        { label: "קבוצה/צ'אט קבוצתי", value: "קבוצה" }
-      ]
+      key: "feeling",
+      multiple: false,
+      options: ["מבולבלת", "מבוכה", "סכנה", "פחד", "עצב", "כעס", "חרדה", "רגועה", "תקווה", "אחר"]
     },
     {
-      text: "מי שלח את ההודעה?",
+      text: "כתבי כאן את ההודעה שקיבלת שאת רוצה שאני אנתח",
+      type: "text",
+      key: "messageText"
+    },
+    {
+      text: "באיזה ערוץ זה קרה?",
       type: "chips",
-      key: "senderType",  // Maps to backend context.senderType (Hebrew values)
-      options: [
-        { label: "מישהו שאני לא מכירה", value: "זר" },
-        { label: "מישהו שאני מכירה", value: "מוכר" }
-      ]
+      key: "channel",
+      multiple: false,
+      options: ["רשתות חברתיות", "קבוצה", "פרטי"]
+    },
+    {
+      text: "מי שלח זאת - מישהו שאת מכירה או זר?",
+      type: "chips",
+      key: "senderType",
+      multiple: false,
+      options: ["מישהו שאני מכירה", "זר"]
+    },
+    {
+      text: "אם יש דבר שמעורר דאגה, אנחנו אולי נרצה ליצור קשר עם מבוגר אחראי שנוכל לסמוך עליו.",
+      type: "chips",
+      key: "trustedAdultEmail",
+      multiple: false,
+      options: ["אזין מייל של מבוגר אחראי", "מעדיפה לא לתת מייל"]
     }
   ];
 
-  // Resource options will come from backend replyOptions
+  // Resource options based on severity
+  const resourceOptions = {
+    mild: [
+      "עזרה עצמית - טכניקות הרגעה",
+      "משאבים מקוונים",
+      "קהילת תמיכה",
+      "טיפים להתמודדות"
+    ],
+    severe: [
+      "עזרה מקצועית - פניה למטפל",
+      "קווי חירום",
+      "תמיכה מיידית",
+      "ליווי מקצועי"
+    ]
+  };
 
   // Auto-scroll to bottom when new messages appear
   const scrollToBottom = () => {
@@ -85,13 +120,13 @@ const ChatInterface = () => {
 
   // Initialize chat with welcome message when component loads
   useEffect(() => {
-    const welcomeMessage = questions[0].text;
-    setMessages([{ text: welcomeMessage, isUser: false }]);
-    // First question is text input (nickname), not chips
-    setShowChips(false);
-    setAllowMultipleSelection(false);
+    const firstQuestion = questions[0];
+    setMessages([{ text: firstQuestion.text, isUser: false }]);
+    setShowChips(true);
+    setCurrentOptions(firstQuestion.options);
+    setAllowMultipleSelection(firstQuestion.multiple || false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // questions is stable, no need to include in deps
+  }, []);
 
   // Handle when user submits text input
   const handleTextSubmit = (text) => {
@@ -101,68 +136,150 @@ const ChatInterface = () => {
     const userMessage = { text: text.trim(), isUser: true };
     setMessages(prev => [...prev, userMessage]);
     
+    // If we were waiting for email input, handle it specially
+    if (isWaitingForEmailInput) {
+      setUserData(prev => ({ ...prev, trustedAdultEmail: text.trim() }));
+      setIsWaitingForEmailInput(false);
+      moveToNextQuestion('trustedAdultEmail', text.trim());
+      return;
+    }
+    
     // Save the answer in userData object
     const currentQuestion = questions[currentQuestionIndex];
-    setUserData(prev => ({ ...prev, [currentQuestion.key]: text.trim() }));
+    console.log('Saving text input - Question:', currentQuestion.text, 'Key:', currentQuestion.key, 'Value:', text.trim());
+    setUserData(prev => {
+      const updated = { ...prev, [currentQuestion.key]: text.trim() };
+      console.log('Updated userData:', updated);
+      return updated;
+    });
 
-    // Move to next question
-    moveToNextQuestion();
+    // Move to next question, passing the current answer to handle last question
+    moveToNextQuestion(currentQuestion.key, text.trim());
   };
 
   // Handle when user clicks a chip
   const handleChipSelect = (value) => {
     const currentQuestion = questions[currentQuestionIndex];
     
-    // Find the option object if it exists (for label/value pairs)
-    const optionObj = currentQuestion.options.find(opt => 
-      typeof opt === 'object' ? (opt.label === value || opt.value === value) : opt === value
-    );
-    
-    // For multiple selection (feelings array)
-    if (currentQuestion.multiple) {
-      const currentSelections = Array.isArray(userData[currentQuestion.key]) 
-        ? userData[currentQuestion.key] 
-        : [];
-      const actualValue = typeof optionObj === 'object' ? optionObj.value : value;
-      const isSelected = currentSelections.includes(actualValue);
+    // Handle email question chip selection
+    if (currentQuestion.key === 'trustedAdultEmail') {
+      const displayText = Array.isArray(value) ? value.join(', ') : value;
+      setMessages(prev => [...prev, { text: displayText, isUser: true }]);
       
-      let newSelections;
-      if (isSelected) {
-        // Remove from selection
-        newSelections = currentSelections.filter(item => item !== actualValue);
+      if (value === "מעדיפה לא לתת מייל") {
+        // User chose not to provide email
+        setUserData(prev => ({ ...prev, trustedAdultEmail: "" }));
+        setShowChips(false);
+        moveToNextQuestion('trustedAdultEmail', "");
       } else {
-        // Add to selection
-        newSelections = [...currentSelections, actualValue];
+        // User wants to enter email - show text input
+        setShowChips(false);
+        setIsWaitingForEmailInput(true);
+        setTimeout(() => {
+          setMessages(prev => [...prev, { text: "אוקיי, הזיני את המייל:", isUser: false }]);
+        }, 500);
       }
-      
-      setUserData(prev => ({ ...prev, [currentQuestion.key]: newSelections }));
-      
-      // Show updated selection as message
-      const displayText = newSelections.length > 0 
-        ? newSelections.join(', ') 
-        : 'לא נבחר';
-      const userMessage = { text: displayText, isUser: true };
-      setMessages(prev => {
-        // Remove previous selection message if exists, add new one
-        const filtered = prev.filter((msg, idx) => 
-          !(msg.isUser && idx === prev.length - 1 && prev.length > 1)
-        );
-        return [...filtered, userMessage];
-      });
-    } else {
-      // Single selection (channel, senderType)
-      const actualValue = typeof optionObj === 'object' ? optionObj.value : value;
-      setUserData(prev => ({ ...prev, [currentQuestion.key]: actualValue }));
+      return;
+    }
+    
+    // Parent consent prompt flow (high-risk)
+    if (isParentConsentPrompt) {
+      const displayText = Array.isArray(value) ? value.join(', ') : value;
+      setMessages(prev => [...prev, { text: displayText, isUser: true }]);
 
-      // Show user's selection as a message (display label if object, otherwise value)
-      const displayText = typeof optionObj === 'object' ? optionObj.label : value;
-      const userMessage = { text: displayText, isUser: true };
-      setMessages(prev => [...prev, userMessage]);
+      const affirmative = value.includes('כן');
+      if (affirmative) {
+        setMessages(prev => [...prev, { text: "אוקיי, אני שולחת", isUser: false }]);
+      } else {
+        setMessages(prev => [...prev, { text: "הבנתי, לא אשלח מייל", isUser: false }]);
+      }
+
+      setIsParentConsentPrompt(false);
+      setShowChips(false);
+      // Proceed to tone selection
+      startToneSelection(replyOptionsData);
+      return;
+    }
+
+    // Tone selection flow
+    if (isToneSelection) {
+      const toneKeyByLabel = {
+        "תגובה עדינה": "gentle",
+        "תגובה נחרצת": "assertive",
+        "לא להגיב": "noReply",
+      };
+      const selectedKey = toneKeyByLabel[value];
+      const replyText = replyOptionsData?.[selectedKey];
+
+      // Show user's choice
+      setMessages(prev => [...prev, { text: value, isUser: true }]);
+
+      // Clear any lingering email input state
+      setIsWaitingForEmailInput(false);
       
-      // Hide chips and move to next question
+      // Show suggested reply from server with a delay
+      if (replyText && selectedKey !== "noReply") {
+        setTimeout(() => {
+          setMessages(prev => [...prev, { 
+            text: replyText, 
+            isUser: false 
+          }]);
+          // After showing the reply, proceed to follow-up resources
+          setTimeout(() => {
+            showFollowUpResources(severityRef.current);
+          }, 1000);
+        }, 500);
+      } else if (selectedKey === "noReply") {
+        // If user chose not to reply, show acknowledgment and proceed
+        setTimeout(() => {
+          setMessages(prev => [...prev, { 
+            text: "הבנתי, זה בסדר גמור לא להגיב.", 
+            isUser: false 
+          }]);
+          setTimeout(() => {
+            showFollowUpResources(severityRef.current);
+          }, 1000);
+        }, 500);
+      } else {
+        // If no reply text available, proceed directly
+        showFollowUpResources(severityRef.current);
+      }
+
+      setIsToneSelection(false);
+      setShowChips(false);
+      return;
+    }
+
+    // Save the selected value in userData
+    setUserData(prev => ({ ...prev, [currentQuestion.key]: value }));
+
+    // Show user's selection as a message
+    // For multiple selection, show array as comma-separated
+    const displayText = Array.isArray(value) ? value.join(', ') : value;
+    const userMessage = { text: displayText, isUser: true };
+    setMessages(prev => [...prev, userMessage]);
+    
+    // For single selection, hide chips and move to next question
+    // For multiple selection, keep chips visible until user is done
+    if (!currentQuestion.multiple) {
       setShowChips(false);
       moveToNextQuestion();
     }
+    // If multiple selection, chips stay visible - user can add more or we wait for "done" button
+  };
+
+  // Start tone selection stage
+  const startToneSelection = async (replyOptions) => {
+    const options = replyOptions || replyOptionsData;
+    if (!options) return;
+
+    // Prompt for tone choice
+    setMessages(prev => [...prev, { text: "חשבתי על כמה תגובות שתוכלי לשלוח. באיזה סגנון תרצי להשתמש?", isUser: false }]);
+
+    setCurrentOptions(["תגובה עדינה", "תגובה נחרצת", "לא להגיב"]);
+    setShowChips(true);
+    setAllowMultipleSelection(false);
+    setIsToneSelection(true);
   };
 
   // Handle when user is done with multiple selection
@@ -172,7 +289,7 @@ const ChatInterface = () => {
   };
 
   // Move to next question or submit data if all questions answered
-  const moveToNextQuestion = () => {
+  const moveToNextQuestion = (lastQuestionKey = null, lastQuestionValue = null) => {
     const nextIndex = currentQuestionIndex + 1;
     
     if (nextIndex < questions.length) {
@@ -199,41 +316,162 @@ const ChatInterface = () => {
       }, 500);
     } else {
       // All questions answered! Send data to backend
-      submitData();
+      // Pass the last answer to ensure it's included
+      submitData(lastQuestionKey, lastQuestionValue);
     }
   };
 
-  // Send collected data to backend using AnalyzeContext
-  const submitData = async () => {
+  // Send collected data to backend
+  const submitData = async (lastQuestionKey = null, lastQuestionValue = null) => {
+    setIsLoading(true);
     setShowChips(false);
     
     // Show loading message
     setMessages(prev => [...prev, { text: "אני מעבדת את המידע שלך...", isUser: false, isTyping: true }]);
 
+    // ============================================
+    // SEND DATA TO BACKEND AS JSON
+    // ============================================
     try {
-      // Prepare request body matching backend API structure
-      const requestBody = {
-        nickname: userData.nickname,  // Required by backend
-        messageText: userData.messageText,  // The incident text
-        context: {
-          channel: userData.channel,  // "פרטי" or "קבוצה" (Hebrew)
-          senderType: userData.senderType,  // "זר" or "מוכר" (Hebrew)
-          feelings: Array.isArray(userData.feelings) ? userData.feelings : []  // Array of feelings (Hebrew)
-        }
+      // Include the last answer if provided (fixes state timing issue)
+      const completeUserData = lastQuestionKey && lastQuestionValue 
+        ? { ...userData, [lastQuestionKey]: lastQuestionValue }
+        : userData;
+      
+      // Debug: Log the entire userData object
+      console.log('Complete userData object:', completeUserData);
+      
+      // Prepare data in the format the backend expects
+      const messageText = completeUserData.messageText || "unspecified";
+      
+      // Map channel values to English
+      const channelMap = {
+        "רשתות חברתיות": "social_media",
+        "קבוצה": "group",
+        "פרטי": "private"
       };
+      
+      // Map senderType values to English
+      const senderTypeMap = {
+        "מישהו שאני מכירה": "known",
+        "זר": "unknown"
+      };
+      
+      const context = {
+        channel: channelMap[completeUserData.channel] || "group",
+        senderType: senderTypeMap[completeUserData.senderType] || "unknown",
+        feeling: completeUserData.feeling || "unknown"
+      };
+      
+      // Build request payload as JSON
+      const requestPayload = {
+        nickname: completeUserData.userIdentifier || "anonymous",
+        messageText,
+        context,
+        trustedAdultEmail: completeUserData.trustedAdultEmail?.trim() || null
+      };
+      
+      console.log('trustedAdultEmail value:', completeUserData.trustedAdultEmail);
+      console.log('Sending JSON to server:', JSON.stringify(requestPayload, null, 2));
+      
+      // Send userData to backend endpoint
+      console.log('Making POST request to /reports...');
+      const response = await axiosInstance.post('/reports', requestPayload);
+      
+      console.log('✅ Response received successfully!');
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+      console.log('Response data type:', typeof response.data);
+      console.log('Response data keys:', Object.keys(response.data || {}));
+      
+      // Remove typing indicator
+      setMessages(prev => prev.filter(msg => !msg.isTyping));
+      
+      console.log('Full response from server:', JSON.stringify(response.data, null, 2));
+      console.log('Response explanation:', response.data?.explanation);
+      console.log('Response supportLine:', response.data?.supportLine);
+      console.log('Response riskLevel:', response.data?.riskLevel);
+      console.log('Response category:', response.data?.category);
+      
+      // ==========================================
+      // MAP SERVER RESPONSE TO CLIENT SEVERITY LEVELS
+      // ==========================================
+      // Server returns Hebrew riskLevel values
+      // Map to client severity: "severe" | "mild"
+      // Save reply options for tone selection
+      setReplyOptionsData(response.data?.replyOptions || null);
 
-      // Call backend API using AnalyzeContext
-      await analyzeMessage(requestBody);
+      // Define high-risk: Hebrew "גבוה"
+      const isHighRisk = response.data?.riskLevel === "גבוה";
+      const responseSeverity = isHighRisk ? "severe" : "mild";
+      setSeverity(responseSeverity);
+      severityRef.current = responseSeverity;
       
-      // Wait for response (analyzeLoading will be false when done)
-      // The response will be in analyzeResponse
+      // ==========================================
+      // DISPLAY SERVER RESPONSE
+      // ==========================================
+      // Display explanation and supportLine as separate messages for better readability
+      if (response.data?.explanation) {
+        console.log('Adding explanation message to chat');
+        setMessages(prev => [...prev, { 
+          text: response.data.explanation, 
+          isUser: false 
+        }]);
+        
+        // Add support line as a separate message if it exists
+        if (response.data.supportLine) {
+          await new Promise(resolve => setTimeout(resolve, 800));
+          console.log('Adding support line message to chat');
+          setMessages(prev => [...prev, { 
+            text: response.data.supportLine, 
+            isUser: false 
+          }]);
+        }
+      } else {
+        console.error('No explanation in response!');
+        setMessages(prev => [...prev, { 
+          text: "קיבלתי את המידע שלך, אבל הייתה בעיה בעיבוד. נסי שוב או פני לעזרה מקצועית.", 
+          isUser: false 
+        }]);
+      }
       
+      // ==========================================
+      // PROCEED TO TONE SELECTION
+      // ==========================================
+      // Proceed directly to tone selection
+      await startToneSelection(response.data?.replyOptions);
     } catch (error) {
-      console.error('Error submitting data:', error);
+      console.error('❌ Error submitting data:', error);
+      console.error('Error type:', error.constructor.name);
+      console.error('Error message:', error.message);
+      console.error('Error response:', error.response);
+      console.error('Error response data:', error.response?.data);
+      console.error('Error response status:', error.response?.status);
+      console.error('Error request:', error.request);
+      console.error('Error config:', error.config);
+      
       // Remove typing indicator and show error
       setMessages(prev => {
         const filtered = prev.filter(msg => !msg.isTyping);
-        return [...filtered, { text: "סליחה, הייתה שגיאה. נסי שוב מאוחר יותר.", isUser: false }];
+        
+        // Create detailed error message
+        let errorMsg = "סליחה, הייתה שגיאה בחיבור לשרת. ";
+        
+        if (error.response) {
+          // Server responded with error
+          errorMsg += `השרת החזיר שגיאה (קוד ${error.response.status}).`;
+        } else if (error.request) {
+          // Request made but no response
+          errorMsg += "השרת לא הגיב. אנא ודאי שהשרת פועל.";
+        } else {
+          // Something else happened
+          errorMsg += "שגיאה לא צפויה. פרטים בקונסול.";
+        }
+        
+        return [...filtered, { 
+          text: errorMsg, 
+          isUser: false 
+        }];
       });
     }
   };
@@ -280,24 +518,28 @@ const ChatInterface = () => {
     if (analyzeError) {
       setMessages(prev => {
         const filtered = prev.filter(msg => !msg.isTyping);
-        return [...filtered, { text: "סליחה, הייתה שגיאה. נסי שוב מאוחר יותר.", isUser: false }];
+        
+        // Create detailed error message
+        let errorMsg = "סליחה, הייתה שגיאה בחיבור לשרת. ";
+        
+        if (error.response) {
+          // Server responded with error
+          errorMsg += `השרת החזיר שגיאה (קוד ${error.response.status}).`;
+        } else if (error.request) {
+          // Request made but no response
+          errorMsg += "השרת לא הגיב. אנא ודאי שהשרת פועל.";
+        } else {
+          // Something else happened
+          errorMsg += "שגיאה לא צפויה. פרטים בקונסול.";
+        }
+        
+        return [...filtered, { 
+          text: errorMsg, 
+          isUser: false 
+        }];
       });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analyzeResponse, analyzeLoading, analyzeError]); // displayResponseInChunks and showFollowUpResources are stable
-
-  // Display backend response in chunks to simulate live chat
-  const displayResponseInChunks = async (fullResponse) => {
-    // Split response into sentences
-    const chunks = fullResponse.split(/[.!?]\s+/).filter(chunk => chunk.trim());
-    
-    // Display each chunk with a delay (like someone is typing)
-    for (let i = 0; i < chunks.length; i++) {
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Wait 1.5 seconds
-      setMessages(prev => [...prev, { 
-        text: chunks[i].trim() + (i < chunks.length - 1 ? '.' : ''), 
-        isUser: false 
-      }]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -359,7 +601,7 @@ const ChatInterface = () => {
 
   // Determine what to show: text input or chips
   const currentQuestion = questions[currentQuestionIndex];
-  const showTextInput = currentQuestion && currentQuestion.type === "text" && !analyzeLoading;
+  const showTextInput = !showFollowUp && !isToneSelection && ((currentQuestion && currentQuestion.type === "text" && !isLoading) || isWaitingForEmailInput);
 
   return (
     <div className={styles.chatContainer}>
@@ -397,8 +639,8 @@ const ChatInterface = () => {
         )}
 
         {/* Show music player in follow-up phase */}
-        {showFollowUp && userData.feelings && Array.isArray(userData.feelings) && userData.feelings.length > 0 && (
-          <MusicPlayer feeling={userData.feelings[0]} />
+        {showFollowUp && userData.feeling && (
+          <MusicPlayer feeling={userData.feeling} />
         )}
         
         {/* Invisible element to scroll to */}
