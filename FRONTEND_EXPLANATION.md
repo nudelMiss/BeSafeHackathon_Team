@@ -126,30 +126,42 @@ Defined at the top of component. Each question object has:
 
 **Current Questions (matched to backend API)**:
 
-1. **Nickname** - Text input
-   - Question: "שלום! אני כאן כדי לעזור לך. בואי נתחיל - איך את רוצה להיקרא? (כינוי)"
-   - Maps to: `nickname` (string, **required by backend**)
+1. **Opening Acknowledgment** - Single selection chip
+   - Question: "שלום, אני האחות הדיגיטלית שלך ברשת. אני כאן כדי לעזור לך להתמודד עם אירועים לא נעימים שחווית ברשת. אני שמחה שהחלטת לפנות אליי, בואי ננסה להבין מה קרה."
+   - Options: `["אוקי, בואי נתחיל"]`
+   - Maps to: `openingAck` (just a confirmation, not sent to backend)
 
-2. **Feelings** - Multiple selection chips
-   - Question: "איך את מרגישה עכשיו? (אפשר לבחור כמה רגשות)"
-   - Options: `["מבולבלת", "פחד", "עצב", "כעס", "חרדה", "תקווה", "אחר"]`
-   - Maps to: `context.feelings` (array of Hebrew strings)
-   - User can select multiple feelings
-   - Shows "סיימתי ✓" button when at least one is selected
+2. **User Identifier (Nickname)** - Text input
+   - Question: "איך היית רוצה שאני אקרא לך? את יכולה לתת את השם שלך או כל כינוי שתבחרי."
+   - Maps to: `userIdentifier` → sent as `nickname` (string, **required by backend**)
 
-3. **What happened?** - Text input
-   - Question: "מה קרה? ספרי לי בקצרה על האירוע או ההודעה שקיבלת."
+3. **Feeling** - Single selection chips
+   - Question: "שלום! אני כאן כדי לעזור לך. בואי נתחיל - איך את מרגישה עכשיו?"
+   - Options: `["מבולבלת", "מבוכה", "סכנה", "פחד", "עצב", "כעס", "חרדה", "רגועה", "תקווה", "אחר"]`
+   - Maps to: `feeling` → converted to `context.feelings` (array with single Hebrew string)
+
+4. **What happened?** - Text input
+   - Question: "כתבי כאן את ההודעה שקיבלת שאת רוצה שאני אנתח"
    - Maps to: `messageText` (string)
 
-4. **Where did it happen?** - Single selection chips
-   - Question: "איפה זה קרה?"
-   - Options: `[{label: "שיחה פרטית", value: "פרטי"}, {label: "קבוצה/צ'אט קבוצתי", value: "קבוצה"}]`
-   - Maps to: `context.channel` ("פרטי" or "קבוצה" - **Hebrew values**)
+5. **Where did it happen?** - Single selection chips
+   - Question: "באיזה ערוץ זה קרה?"
+   - Options: `["רשתות חברתיות", "קבוצה", "פרטי"]`
+   - Maps to: `channel` → converted to `context.channel` ("פרטי" or "קבוצה" - **Hebrew values**)
+   - Note: "רשתות חברתיות" is mapped to "קבוצה"
 
-5. **Who sent it?** - Single selection chips
-   - Question: "מי שלח את ההודעה?"
-   - Options: `[{label: "מישהו שאני לא מכירה", value: "זר"}, {label: "מישהו שאני מכירה", value: "מוכר"}]`
-   - Maps to: `context.senderType` ("זר" or "מוכר" - **Hebrew values**)
+6. **Who sent it?** - Single selection chips
+   - Question: "מי שלח זאת - מישהו שאת מכירה או זר?"
+   - Options: `["מישהו שאני מכירה", "זר"]`
+   - Maps to: `senderType` → converted to `context.senderType` ("זר" or "מוכר" - **Hebrew values**)
+   - Note: "מישהו שאני מכירה" is mapped to "מוכר"
+
+7. **Responsible Adult Email (Optional)** - Conditional chips → text input
+   - Question: "אם יש דבר שמעורר דאגה, אנחנו אולי נרצה ליצור קשר עם מבוגר אחראי שנוכל לסמוך עליו."
+   - Options: `["אזין מייל של מבוגר אחראי", "מעדיפה לא לתת מייל"]`
+   - If user chooses to provide email: shows text input "אוקיי, הזיני את המייל:"
+   - Maps to: `trustedAdultEmail` → sent as `ResponsibleAdultEmail` (optional string)
+   - Only sent to backend if user provides an email
 
 #### Key Functions:
 
@@ -186,32 +198,52 @@ Defined at the top of component. Each question object has:
    - Prepares request body matching backend API structure:
      ```javascript
      {
-       nickname: userData.nickname,  // Required
+       nickname: userData.userIdentifier || "anonymous",  // Required
        messageText: userData.messageText,
        context: {
-         channel: userData.channel,  // "פרטי" or "קבוצה" (Hebrew)
-         senderType: userData.senderType,  // "זר" or "מוכר" (Hebrew)
-         feelings: userData.feelings  // Array of Hebrew strings
-       }
+         channel: "פרטי" | "קבוצה",  // Hebrew value (mapped from user selection)
+         senderType: "זר" | "מוכר",  // Hebrew value (mapped from user selection)
+         feelings: [userData.feeling]  // Array with single Hebrew string
+       },
+       ResponsibleAdultEmail: userData.trustedAdultEmail || undefined  // Optional, only if provided
      }
      ```
-   - Calls `analyzeMessage(requestBody)` from AnalyzeContext
-   - Shows typing indicator
+   - **Mapping Logic**:
+     - Channel: "רשתות חברתיות" → "קבוצה", "קבוצה" → "קבוצה", "פרטי" → "פרטי"
+     - SenderType: "מישהו שאני מכירה" → "מוכר", "זר" → "זר"
+     - Feeling: Single selection converted to array `[feeling]`
+   - Removes `ResponsibleAdultEmail` if undefined (not sent to backend)
+   - Calls `analyzeMessage(requestPayload)` from AnalyzeContext
+   - Shows typing indicator "אני מעבדת את המידע שלך..."
 
-6. **`displayResponseInChunks(fullResponse)`**
-   - Splits response into sentences
-   - Displays each sentence with 1.5 second delay
-   - Creates illusion of live typing
+6. **`displayResponseInChunks(fullText)`**
+   - Splits text into sentences using regex `/([.!?]\s+)/`
+   - Filters out empty sentences
+   - Displays each sentence as a separate message with 1.5 second delay between them
+   - Creates illusion of live typing/chat
+   - Returns a Promise that resolves when all sentences are displayed
 
-7. **`showFollowUpResources(severityLevel, replyOptions)`**
+7. **`startToneSelection(replyOptions)`**
+   - Called after backend response is displayed
+   - Prompts user: "חשבתי על כמה תגובות שתוכלי לשלוח. באיזה סגנון תרצי להשתמש?"
+   - Shows chips: ["תגובה עדינה", "תגובה נחרצת", "לא להגיב"]
+   - Sets `isToneSelection` state to true
+   - Uses `replyOptions` from backend or `replyOptionsData` from state
+
+8. **`showFollowUpResources(severityLevel, replyOptions)`**
    - Called after backend response
-   - Shows music player (feeling-specific, uses first feeling from array)
+   - Shows music player (feeling-specific, uses `userData.feeling`)
    - Converts `replyOptions` object to chip options
    - Displays reply options as chips: gentle, assertive, noReply
+   - Sets `showFollowUp` state to true
 
-8. **`handleResourceSelect(resource)`**
-   - Called when user selects a reply option
-   - Shows confirmation message
+9. **`handleResourceSelect(resource)`**
+   - Called when user selects a reply option in tone selection
+   - Maps chip label to key: "תגובה עדינה" → "gentle", "תגובה נחרצת" → "assertive", "לא להגיב" → "noReply"
+   - Retrieves reply text from `replyOptionsData[selectedKey]`
+   - Shows user's selection as a message
+   - If not "noReply", displays the suggested reply text
+   - Shows confirmation message: "מצוין! אני כאן אם תצטרכי עוד עזרה. זכרי - את לא לבד 💙"
    - Ends the chat flow
 
 #### useEffect Hooks:
@@ -219,35 +251,47 @@ Defined at the top of component. Each question object has:
 1. **Auto-scroll**: Scrolls to bottom whenever `messages` array changes
 2. **Initialize**: Shows welcome message and first question (nickname) when component loads
 3. **Handle Backend Response**: Watches `analyzeResponse`, `analyzeLoading`, and `analyzeError`
-   - When response arrives: displays `explanation` and `supportLine`
-   - Maps `riskLevel` to severity (גבוה/בינוני = severe, נמוך = mild)
-   - Shows follow-up resources with music and reply options
+   - When response arrives:
+     - Removes typing indicator
+     - Extracts `riskLevel`, `explanation`, `replyOptions`, `supportLine`, `emailReport`
+     - Logs email report status (sent/failed) to console
+     - Saves `replyOptions` to `replyOptionsData` state for tone selection
+     - Maps `riskLevel` to severity (גבוה/בינוני = severe, נמוך = mild)
+     - Displays `explanation` in chunks using `displayResponseInChunks()`
+     - After explanation, displays `supportLine` in chunks (if exists)
+     - Shows follow-up resources with music and reply options
+   - On error: displays user-friendly error message in Hebrew
 
 ---
 
 ## Data Flow Summary
 
 ```
-1. Component loads → Welcome message + Nickname question appears
-2. User enters nickname → Saved in userData.nickname
-3. Feelings question appears → User can select multiple feelings
-4. User clicks "סיימתי ✓" → Saved in userData.feelings (array)
-5. What happened question → User types messageText
-6. Where question → User selects channel ("פרטי" or "קבוצה")
-7. Who sent it question → User selects senderType ("זר" or "מוכר")
-8. All questions answered → submitData() called
-9. Request formatted to match backend:
-   {
-     nickname: "user123",
-     messageText: "...",
-     context: {
-       channel: "פרטי" | "קבוצה",  // Hebrew
-       senderType: "זר" | "מוכר",  // Hebrew
-       feelings: ["פחד", "עצב"]  // Array of Hebrew strings
-     }
-   }
-10. POST request to /api/reports → Backend AI analyzes (uses user history)
-11. Response received:
+1. Component loads → Opening acknowledgment message + "אוקי, בואי נתחיל" chip appears
+2. User clicks chip → User identifier question appears
+3. User enters nickname → Saved in userData.userIdentifier
+4. Feeling question appears → User selects single feeling
+5. Feeling saved → What happened question appears
+6. User types messageText → Saved in userData.messageText
+7. Where question appears → User selects channel ("רשתות חברתיות", "קבוצה", or "פרטי")
+8. Channel saved → Who sent it question appears
+9. User selects senderType → Saved in userData.senderType
+10. Responsible adult email question appears → User chooses to provide email or not
+11. If email chosen → Text input appears, user enters email → Saved in userData.trustedAdultEmail
+12. All questions answered → submitData() called
+13. Request formatted to match backend:
+    {
+      nickname: "user123",  // From userIdentifier
+      messageText: "...",
+      context: {
+        channel: "פרטי" | "קבוצה",  // Hebrew (mapped from user selection)
+        senderType: "זר" | "מוכר",  // Hebrew (mapped from user selection)
+        feelings: ["פחד"]  // Array with single Hebrew string
+      },
+      ResponsibleAdultEmail: "email@example.com"  // Optional, only if provided
+    }
+14. POST request to /api/reports → Backend AI analyzes (uses user history)
+15. Response received:
     {
       riskLevel: "נמוך" | "בינוני" | "גבוה",  // Hebrew
       category: "גרומינג" | "הטרדה" | etc,  // Hebrew
@@ -258,15 +302,20 @@ Defined at the top of component. Each question object has:
         noReply: "לא להגיב..."
       },
       supportLine: "משפט תמיכה...",
+      emailReport: {  // Only if ResponsibleAdultEmail was provided and riskLevel is "גבוה"
+        sent: true | false,
+        error: "error message"  // Only if sent is false
+      },
       userId: "...",  // Backend returns (can ignore)
       nickname: "...",  // Backend returns (can ignore)
       reportId: "...",  // Backend returns (can ignore)
       createdAt: "..."  // Backend returns (can ignore)
     }
-12. Display explanation + supportLine in chunks
-13. Show music player (feeling-specific, uses first feeling)
-14. Show reply options as chips
-15. User selects reply option → Confirmation message
+16. Display explanation in chunks (sentence by sentence, 1.5s delay)
+17. Display supportLine in chunks (if exists)
+18. Show music player (feeling-specific, uses userData.feeling)
+19. Show reply options as chips (gentle, assertive, noReply)
+20. User selects reply option → Shows selected reply text → Confirmation message
 ```
 
 ---
@@ -281,15 +330,21 @@ Defined at the top of component. Each question object has:
 ### Request Format:
 ```javascript
 {
-  nickname: string,  // REQUIRED - User's nickname/identifier
+  nickname: string,  // REQUIRED - User's nickname/identifier (from userIdentifier question)
   messageText: string,  // The incident/message text
   context: {
-    channel: "פרטי" | "קבוצה",  // Where it happened (Hebrew)
-    senderType: "זר" | "מוכר",  // Who sent it (Hebrew)
-    feelings: string[]  // Array of Hebrew feeling strings
-  }
+    channel: "פרטי" | "קבוצה",  // Where it happened (Hebrew, mapped from user selection)
+    senderType: "זר" | "מוכר",  // Who sent it (Hebrew, mapped from user selection)
+    feelings: string[]  // Array with single Hebrew feeling string (from feeling question)
+  },
+  ResponsibleAdultEmail?: string  // OPTIONAL - Only included if user provided email
 }
 ```
+
+**Value Mapping**:
+- Channel: User selects "רשתות חברתיות" → sent as "קבוצה", "קבוצה" → "קבוצה", "פרטי" → "פרטי"
+- SenderType: User selects "מישהו שאני מכירה" → sent as "מוכר", "זר" → "זר"
+- Feelings: Single selection converted to array (e.g., "פחד" → `["פחד"]`)
 
 ### Response Format:
 ```javascript
@@ -303,6 +358,10 @@ Defined at the top of component. Each question object has:
     noReply: string  // No reply option (Hebrew)
   },
   supportLine: string,  // Support message (Hebrew)
+  emailReport?: {  // Only present if ResponsibleAdultEmail was provided and riskLevel is "גבוה"
+    sent: boolean,  // true if email sent successfully, false if failed
+    error?: string  // Error message if sent is false
+  },
   userId: string,  // Backend-generated (can ignore in UI)
   nickname: string,  // Echoed back (can ignore in UI)
   reportId: string,  // Backend-generated (can ignore in UI)
@@ -311,10 +370,11 @@ Defined at the top of component. Each question object has:
 ```
 
 ### How It's Used:
-- **`explanation`** → Displayed as main response in chunks
-- **`supportLine`** → Displayed after explanation
-- **`replyOptions`** → Converted to chips for user selection
+- **`explanation`** → Displayed as main response in chunks (sentence by sentence, 1.5s delay)
+- **`supportLine`** → Displayed after explanation in chunks (if exists)
+- **`replyOptions`** → Saved to `replyOptionsData` state, then converted to chips for tone selection
 - **`riskLevel`** → Mapped to severity (גבוה/בינוני = severe, נמוך = mild) for resource selection
+- **`emailReport`** → Logged to console (sent/failed status), not displayed to user
 - **`category`** → Can be used for analytics (not displayed to user)
 
 ### Backend Features:
@@ -415,11 +475,11 @@ client/src/
 
 ## Key Features
 
-### Multiple Selection for Feelings:
-- Users can select multiple feelings
-- Selected feelings are highlighted
-- "סיימתי ✓" button appears when at least one feeling is selected
-- Feelings are sent as an array to backend
+### Single Selection for Feelings:
+- Users select a single feeling from the options
+- Selected feeling is highlighted
+- Feeling is converted to an array format for backend: `[selectedFeeling]`
+- Backend expects `feelings` as an array (even with single item)
 
 ### Hebrew Values:
 - All backend values use Hebrew:
@@ -428,8 +488,16 @@ client/src/
   - RiskLevel: "נמוך" / "בינוני" / "גבוה"
   - Feelings: Array of Hebrew strings
 
+### Email Reporting:
+- If user provides `ResponsibleAdultEmail` and backend determines `riskLevel === "גבוה"`, backend attempts to send email
+- Email status is returned in `emailReport` object:
+  - `{ sent: true }` if email sent successfully
+  - `{ sent: false, error: "..." }` if email failed (e.g., missing email config)
+- Email status is logged to console, not displayed to user
+- Email service requires `RESEND_API_KEY` and `EMAIL_FROM` in backend `.env` file
+
 ### User History Integration:
-- Backend tracks reports by nickname
+- Backend tracks reports by nickname (userIdentifier)
 - Tone adjusts based on number of previous reports
 - More direct responses for repeat users
 
