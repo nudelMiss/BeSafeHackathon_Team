@@ -165,7 +165,13 @@ const ChatInterface = () => {
 
   // Handle when user clicks a chip
   const handleChipSelect = (value) => {
-    // Tone selection flow - check this FIRST before checking currentQuestion
+    // Continuation prompt flow - check this FIRST
+    if (isContinuationPrompt) {
+      handleContinuationChoice(value);
+      return;
+    }
+    
+    // Tone selection flow - check this SECOND
     if (isToneSelection) {
       const toneKeyByLabel = {
         "תגובה עדינה": "gentle",
@@ -218,8 +224,8 @@ const ChatInterface = () => {
     
     const currentQuestion = questions[currentQuestionIndex];
     
-    // Handle email question chip selection
-    if (currentQuestion && currentQuestion.key === 'trustedAdultEmail') {
+    // Handle email question chip selection (only if not in continuation prompt)
+    if (currentQuestion && currentQuestion.key === 'trustedAdultEmail' && !isContinuationPrompt) {
       const displayText = Array.isArray(value) ? value.join(', ') : value;
       setMessages(prev => [...prev, { text: displayText, isUser: true }]);
       
@@ -500,14 +506,23 @@ const ChatInterface = () => {
         }, 1000);
       }
       
-      // Display email badge if email was sent
-      if (emailReport?.sent === true) {
+      // Display email result (sent or failed)
+      if (emailReport) {
         setTimeout(() => {
-          setMessages(prev => [...prev, { 
-            text: "✅ נשלח מייל למבוגר אחראי", 
-            isUser: false,
-            isEmailBadge: true 
-          }]);
+          if (emailReport.sent === true) {
+            // Email sent successfully
+            setMessages(prev => [...prev, { 
+              text: "✅ נשלח מייל למבוגר אחראי", 
+              isUser: false,
+              isEmailBadge: true 
+            }]);
+          } else if (emailReport.error) {
+            // Email failed to send - show message and continue flow
+            setMessages(prev => [...prev, { 
+              text: "לא הצלחתי לשלוח את המייל כרגע, אבל נמשיך הלאה. את יכולה לנסות שוב מאוחר יותר.", 
+              isUser: false 
+            }]);
+          }
         }, 1500);
       }
       
