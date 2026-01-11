@@ -33,6 +33,7 @@ const ChatInterface = () => {
   const [isParentConsentPrompt, setIsParentConsentPrompt] = useState(false);
   const [isToneSelection, setIsToneSelection] = useState(false);
   const [isContinuationPrompt, setIsContinuationPrompt] = useState(false);
+  const [isFollowUpHelp, setIsFollowUpHelp] = useState(false);
   const [showMusicPlayer, setShowMusicPlayer] = useState(false);
   const [replyOptionsData, setReplyOptionsData] = useState(null);
   const [isWaitingForEmailInput, setIsWaitingForEmailInput] = useState(false);
@@ -150,6 +151,13 @@ const ChatInterface = () => {
       return;
     }
     
+    // If this is a follow-up help question, send it to backend
+    if (isFollowUpHelp) {
+      setIsFollowUpHelp(false);
+      handleFollowUpQuestion(text.trim());
+      return;
+    }
+    
     // Save the answer in userData object
     const currentQuestion = questions[currentQuestionIndex];
     console.log('Saving text input - Question:', currentQuestion.text, 'Key:', currentQuestion.key, 'Value:', text.trim());
@@ -161,6 +169,55 @@ const ChatInterface = () => {
 
     // Move to next question, passing the current answer to handle last question
     moveToNextQuestion(currentQuestion.key, text.trim());
+  };
+  
+  // Handle follow-up question from user
+  const handleFollowUpQuestion = async (followUpText) => {
+    // Show loading message
+    setMessages(prev => [...prev, { text: "אני מעבדת את השאלה שלך...", isUser: false, isTyping: true }]);
+    
+    try {
+      // Map channel values to Hebrew (same as in submitData)
+      const channelMap = {
+        "רשתות חברתיות": "קבוצה",
+        "קבוצה": "קבוצה",
+        "פרטי": "פרטי"
+      };
+      
+      // Map senderType values to Hebrew (same as in submitData)
+      const senderTypeMap = {
+        "מישהו שאני מכירה": "מוכר",
+        "זר": "זר"
+      };
+      
+      // Prepare request with follow-up question
+      // Use existing user data but replace messageText with follow-up question
+      const requestPayload = {
+        nickname: userData.userIdentifier || "anonymous",
+        messageText: followUpText,
+        context: {
+          channel: channelMap[userData.channel] || "קבוצה",
+          senderType: senderTypeMap[userData.senderType] || "זר",
+          feelings: userData.feeling ? [userData.feeling] : []
+        }
+      };
+      
+      console.log('Sending follow-up question to server:', JSON.stringify(requestPayload, null, 2));
+      
+      // Send to backend
+      await analyzeMessage(requestPayload);
+      
+      // Response will be handled by useEffect hook that watches analyzeResponse
+    } catch (error) {
+      console.error('❌ Error submitting follow-up question:', error);
+      setMessages(prev => {
+        const filtered = prev.filter(msg => !msg.isTyping);
+        return [...filtered, { 
+          text: "סליחה, הייתה שגיאה בשליחת השאלה. נסי שוב.", 
+          isUser: false 
+        }];
+      });
+    }
   };
 
   // Handle when user clicks a chip
@@ -591,13 +648,14 @@ const ChatInterface = () => {
         setShowMusicPlayer(true);
       }, 500);
     } else if (choice === "לעשות משהו נוסף") {
-      // User wants to do something else - could show additional options or resources
+      // User wants to do something else - show text input for follow-up question
       setTimeout(() => {
         setMessages(prev => [...prev, { 
           text: "איך עוד אוכל לעזור לך?", 
           isUser: false 
         }]);
-        // Could add more options here if needed
+        // Enable follow-up help text input
+        setIsFollowUpHelp(true);
       }, 500);
     }
   };
@@ -616,7 +674,7 @@ const ChatInterface = () => {
 
   // Determine what to show: text input or chips
   const currentQuestion = questions[currentQuestionIndex];
-  const showTextInput = !showFollowUp && !isToneSelection && !isContinuationPrompt && ((currentQuestion && currentQuestion.type === "text" && !analyzeLoading) || isWaitingForEmailInput);
+  const showTextInput = !showFollowUp && !isToneSelection && !isContinuationPrompt && ((currentQuestion && currentQuestion.type === "text" && !analyzeLoading) || isWaitingForEmailInput || isFollowUpHelp);
 
   return (
     <div className={styles.chatContainer}>
