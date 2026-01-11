@@ -166,7 +166,7 @@ userHistorySummary:
       if (shouldReport) {
           try {
               const emailContent = buildResponsibleAdultEmail(parsed, user.nickname || "המשתמשת");
-              await sendResponsibleAdultEmail(ResponsibleAdultEmail, emailContent.body)
+              await sendResponsibleAdultEmail(ResponsibleAdultEmail, emailContent.subject, emailContent.body)
               emailReport = {sent : true} ;
           } catch (error) {
               console.error("Failed to send responsible adult email: " , error);

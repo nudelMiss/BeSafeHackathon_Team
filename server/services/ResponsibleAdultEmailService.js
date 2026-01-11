@@ -11,9 +11,7 @@ if (process.env.RESEND_API_KEY) {
     }
 }
 
-const SUBJECT = 'My Digital Sister - התראת בטיחות';
-
-export async function sendResponsibleAdultEmail(to, body) {
+export async function sendResponsibleAdultEmail(to, subject, body) {
     // Check if email service is configured
     if (!resend || !process.env.RESEND_API_KEY || !process.env.EMAIL_FROM) {
         throw new Error('Email service is not configured. Please set RESEND_API_KEY and EMAIL_FROM in .env file.');
@@ -22,7 +20,7 @@ export async function sendResponsibleAdultEmail(to, body) {
     await resend.emails.send({
         from: `"My Digital Sister" <${process.env.EMAIL_FROM}>`,
         to,
-        subject: SUBJECT,
+        subject: subject,
         text: body,
     })
 }
