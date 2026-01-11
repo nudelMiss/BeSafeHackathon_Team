@@ -32,6 +32,8 @@ const ChatInterface = () => {
   // Track special interaction modes
   const [isParentConsentPrompt, setIsParentConsentPrompt] = useState(false);
   const [isToneSelection, setIsToneSelection] = useState(false);
+  const [isContinuationPrompt, setIsContinuationPrompt] = useState(false);
+  const [showMusicPlayer, setShowMusicPlayer] = useState(false);
   const [replyOptionsData, setReplyOptionsData] = useState(null);
   const [isWaitingForEmailInput, setIsWaitingForEmailInput] = useState(false);
   
@@ -228,9 +230,9 @@ const ChatInterface = () => {
             text: replyText, 
             isUser: false 
           }]);
-          // After showing the reply, proceed to follow-up resources
+          // After showing the reply, show continuation prompt
           setTimeout(() => {
-            showFollowUpResources(severityRef.current);
+            showContinuationPrompt();
           }, 1000);
         }, 500);
       } else if (selectedKey === "noReply") {
@@ -241,12 +243,12 @@ const ChatInterface = () => {
             isUser: false 
           }]);
           setTimeout(() => {
-            showFollowUpResources(severityRef.current);
+            showContinuationPrompt();
           }, 1000);
         }, 500);
       } else {
-        // If no reply text available, proceed directly
-        showFollowUpResources(severityRef.current);
+        // If no reply text available, show continuation prompt directly
+        showContinuationPrompt();
       }
 
       setIsToneSelection(false);
@@ -458,32 +460,62 @@ const ChatInterface = () => {
       setSeverity(severity);
       severityRef.current = severity;
       
-      // Display explanation as main response
+      // Display risk level as a message
+      if (riskLevel) {
+        const riskLevelText = `רמת הסיכון שמצאנו: ${riskLevel}`;
+        setMessages(prev => [...prev, { 
+          text: riskLevelText, 
+          isUser: false 
+        }]);
+      }
+      
+      // Display category as a message
+      if (analyzeResponse.category) {
+        const categoryText = `הקטגוריה שמצאנו: ${analyzeResponse.category}`;
+        setMessages(prev => [...prev, { 
+          text: categoryText, 
+          isUser: false 
+        }]);
+      }
+      
+      // Display explanation
       if (explanation) {
-        displayResponseInChunks(explanation).then(() => {
-          // Show support line after explanation
-          if (supportLine) {
-            setTimeout(async () => {
-              await displayResponseInChunks(supportLine);
-              // After response, show follow-up with music and reply options
-              await showFollowUpResources(severity, replyOptions);
-            }, 2000);
-          } else {
-            // If no supportLine, still show follow-up
-            setTimeout(async () => {
-              await showFollowUpResources(severity, replyOptions);
-            }, 2000);
-          }
-        });
-      } else {
-        // If no explanation, show follow-up directly
-        setTimeout(async () => {
-          await showFollowUpResources(severity, replyOptions);
+        setTimeout(() => {
+          setMessages(prev => [...prev, { 
+            text: explanation, 
+            isUser: false 
+          }]);
+        }, 500);
+      }
+      
+      // Display support line
+      if (supportLine) {
+        setTimeout(() => {
+          setMessages(prev => [...prev, { 
+            text: supportLine, 
+            isUser: false 
+          }]);
         }, 1000);
       }
+      
+      // Display email badge if email was sent
+      if (emailReport?.sent === true) {
+        setTimeout(() => {
+          setMessages(prev => [...prev, { 
+            text: "✅ נשלח מייל למבוגר אחראי", 
+            isUser: false,
+            isEmailBadge: true 
+          }]);
+        }, 1500);
+      }
+      
+      // Proceed to tone selection (reply options)
+      setTimeout(() => {
+        startToneSelection(replyOptions);
+      }, 2000);
     }
     
-    if (analyzeError) {
+    if (analyzeError && !analyzeLoading) {
       setMessages(prev => {
         const filtered = prev.filter(msg => !msg.isTyping);
         
@@ -510,48 +542,47 @@ const ChatInterface = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analyzeResponse, analyzeLoading, analyzeError]);
 
-  // Show follow-up with music and resources (replyOptions from backend)
-  const showFollowUpResources = async (severityLevel, replyOptions) => {
-    // Wait a bit after the response
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Show message about reply options
+  // Show continuation prompt after user selects reply option
+  const showContinuationPrompt = () => {
     setMessages(prev => [...prev, { 
-      text: "בואי נחשוב יחד על איך להגיב. יש כאן כמה אפשרויות:", 
+      text: "מה תרצי שנעשה מכאן?", 
       isUser: false 
     }]);
     
-    // Enable follow-up phase
-    setShowFollowUp(true);
-    
-    // Convert replyOptions object to array of options
-    if (replyOptions) {
-      const options = [
-        { label: `תגובה עדינה: ${replyOptions.gentle}`, value: "gentle" },
-        { label: `תגובה תקיפה: ${replyOptions.assertive}`, value: "assertive" },
-        { label: `לא להגיב: ${replyOptions.noReply}`, value: "noReply" }
-      ];
-      const chipOptions = options.map(opt => opt.label);
-      setCurrentOptions(chipOptions);
-      setShowChips(true);
-      setAllowMultipleSelection(false);
-    }
+    // Set continuation options
+    setCurrentOptions(["לעשות משהו נוסף", "לסיים לעת עתה"]);
+    setShowChips(true);
+    setAllowMultipleSelection(false);
+    setIsContinuationPrompt(true);
   };
 
-  // Handle resource selection
-  const handleResourceSelect = (resource) => {
-    const userMessage = { text: resource, isUser: true };
+  // Handle continuation choice
+  const handleContinuationChoice = (choice) => {
+    const userMessage = { text: choice, isUser: true };
     setMessages(prev => [...prev, userMessage]);
     setShowChips(false);
+    setIsContinuationPrompt(false);
     
-    // Show confirmation message
-    setTimeout(() => {
-      setMessages(prev => [...prev, { 
-        text: "מצוין! אני כאן אם תצטרכי עוד עזרה. זכרי - את לא לבד 💙", 
-        isUser: false 
-      }]);
-      setShowFollowUp(false);
-    }, 500);
+    if (choice === "לסיים לעת עתה") {
+      // User wants to close chat - show music player for relaxation support
+      setTimeout(() => {
+        setMessages(prev => [...prev, { 
+          text: "זה בסדר גמור. אני כאן מתי שתרצי לחזור 💙", 
+          isUser: false 
+        }]);
+        // Show music player based on the feeling they selected at the beginning
+        setShowMusicPlayer(true);
+      }, 500);
+    } else if (choice === "לעשות משהו נוסף") {
+      // User wants to do something else - could show additional options or resources
+      setTimeout(() => {
+        setMessages(prev => [...prev, { 
+          text: "איך עוד אוכל לעזור לך?", 
+          isUser: false 
+        }]);
+        // Could add more options here if needed
+      }, 500);
+    }
   };
 
   // Handle text input
@@ -568,7 +599,7 @@ const ChatInterface = () => {
 
   // Determine what to show: text input or chips
   const currentQuestion = questions[currentQuestionIndex];
-  const showTextInput = !showFollowUp && !isToneSelection && ((currentQuestion && currentQuestion.type === "text" && !analyzeLoading) || isWaitingForEmailInput);
+  const showTextInput = !showFollowUp && !isToneSelection && !isContinuationPrompt && ((currentQuestion && currentQuestion.type === "text" && !analyzeLoading) || isWaitingForEmailInput);
 
   return (
     <div className={styles.chatContainer}>
@@ -580,6 +611,7 @@ const ChatInterface = () => {
               message={msg.text} 
               isUser={msg.isUser} 
               isTyping={msg.isTyping}
+              isEmailBadge={msg.isEmailBadge}
             />
           </div>
         ))}
@@ -605,8 +637,8 @@ const ChatInterface = () => {
           </div>
         )}
 
-        {/* Show music player in follow-up phase */}
-        {showFollowUp && userData.feeling && (
+        {/* Show music player when user chooses to close chat - for relaxation support */}
+        {showMusicPlayer && userData.feeling && (
           <MusicPlayer feeling={userData.feeling} />
         )}
         
@@ -643,4 +675,5 @@ const ChatInterface = () => {
 };
 
 export default ChatInterface;
+
 
