@@ -32,9 +32,11 @@
 }
 
 .main {
-  padding: 20px;
+  padding: 20px; /* Equal padding on all sides to match header/footer margins */
   background-color: #FFDCE8;
-  height: 100vh;
+  min-height: calc(100vh - 150px); /* Account for header (~110px) and footer (~40px) */
+  max-height: calc(100vh - 150px);
+  overflow: hidden;
 }
 
 .footer {

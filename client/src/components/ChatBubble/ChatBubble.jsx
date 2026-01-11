@@ -1,10 +1,24 @@
 import styles from './ChatBubble.module.css';
 
 const ChatBubble = ({ message, isUser = false, isTyping = false, isEmailBadge = false }) => {
+  // Handle line breaks in message text
+  const formatMessage = (text) => {
+    if (!text) return '';
+    return text.split('\n').map((line, index, array) => (
+      <span key={index}>
+        {line}
+        {index < array.length - 1 && <br />}
+      </span>
+    ));
+  };
+
   return (
     <div className={`${styles.bubble} ${isUser ? styles.userBubble : styles.botBubble} ${isTyping ? styles.typing : ''} ${isEmailBadge ? styles.emailBadge : ''}`}>
-      <p className={styles.messageText}>{message}</p>
-      {isTyping && <span className={styles.typingIndicator}>...</span>}
+      {isTyping ? (
+        <span className={styles.typingIndicator}>...</span>
+      ) : (
+        <p className={styles.messageText}>{formatMessage(message)}</p>
+      )}
     </div>
   );
 };

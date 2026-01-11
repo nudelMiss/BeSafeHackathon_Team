@@ -1,13 +1,14 @@
 .chatContainer {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 200px);
+  height: calc(100vh - 270px); /* Adjusted to match header and footer margins */
   max-width: 800px;
-  margin: 0 auto;
+  margin: 0 auto 20px auto; /* Margin from footer (matches header margin) */
   background-color: #ffe6f0;
   border-radius: 20px;
   padding: 20px;
   box-shadow: 0 4px 20px rgba(255, 179, 209, 0.2);
+  overflow: hidden;
 }
 
 .messagesContainer {

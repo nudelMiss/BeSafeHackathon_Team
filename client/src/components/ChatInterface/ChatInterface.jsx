@@ -81,11 +81,18 @@ const ChatInterface = () => {
       key: "userIdentifier"
     },
     {
-      text: "שלום! אני כאן כדי לעזור לך. בואי נתחיל - איך את מרגישה עכשיו?",
+      text: "שלום! אני כאן כדי לעזור לך. בואי נתחיל - איך את מרגישה עכשיו? (אפשר לבחור כמה רגשות)",
       type: "chips",
       key: "feeling",
-      multiple: false,
+      multiple: true,
       options: ["מבולבלת", "מבוכה", "סכנה", "פחד", "עצב", "כעס", "חרדה", "רגועה", "תקווה", "אחר"]
+    },
+    {
+      text: "אם יש דבר שמעורר דאגה, אנחנו אולי נרצה ליצור קשר עם מבוגר אחראי שנוכל לסמוך עליו.",
+      type: "chips",
+      key: "trustedAdultEmail",
+      multiple: false,
+      options: ["אזין מייל של מבוגר אחראי", "מעדיפה לא לתת מייל"]
     },
     {
       text: "כתבי כאן את ההודעה שקיבלת שאת רוצה שאני אנתח",
@@ -105,13 +112,6 @@ const ChatInterface = () => {
       key: "senderType",
       multiple: false,
       options: ["מישהו שאני מכירה", "זר"]
-    },
-    {
-      text: "אם יש דבר שמעורר דאגה, אנחנו אולי נרצה ליצור קשר עם מבוגר אחראי שנוכל לסמוך עליו.",
-      type: "chips",
-      key: "trustedAdultEmail",
-      multiple: false,
-      options: ["אזין מייל של מבוגר אחראי", "מעדיפה לא לתת מייל"]
     }
   ];
 
@@ -192,13 +192,19 @@ const ChatInterface = () => {
       
       // Prepare request with follow-up question
       // Use existing user data but replace messageText with follow-up question
+      // Backend expects feelings as array (Hebrew strings)
+      // feeling is already an array if multiple selection was used
+      const feelings = Array.isArray(userData.feeling) 
+        ? userData.feeling.filter(f => f && f.trim())  // Already an array, filter empty values
+        : (userData.feeling ? [userData.feeling] : []);  // Single value, convert to array
+      
       const requestPayload = {
         nickname: userData.userIdentifier || "anonymous",
         messageText: followUpText,
         context: {
           channel: channelMap[userData.channel] || "קבוצה",
           senderType: senderTypeMap[userData.senderType] || "זר",
-          feelings: userData.feeling ? [userData.feeling] : []
+          feelings: feelings
         }
       };
       
@@ -429,9 +435,10 @@ const ChatInterface = () => {
       };
       
       // Backend expects feelings as array (Hebrew strings)
-      const feelings = completeUserData.feeling 
-        ? [completeUserData.feeling]  // Convert single feeling to array
-        : [];
+      // feeling is already an array if multiple selection was used
+      const feelings = Array.isArray(completeUserData.feeling) 
+        ? completeUserData.feeling.filter(f => f && f.trim())  // Already an array, filter empty values
+        : (completeUserData.feeling ? [completeUserData.feeling] : []);  // Single value, convert to array
       
       const context = {
         channel: channelMap[completeUserData.channel] || "קבוצה",
@@ -525,68 +532,73 @@ const ChatInterface = () => {
       setSeverity(severity);
       severityRef.current = severity;
       
-      // Display risk level as a message
-      if (riskLevel) {
-        const riskLevelText = `רמת הסיכון שמצאנו: ${riskLevel}`;
+      // Helper function to show typing indicator, then message
+      const showMessageWithTyping = async (messageText, delay = 1000, isEmailBadge = false) => {
+        // Show typing indicator
         setMessages(prev => [...prev, { 
-          text: riskLevelText, 
-          isUser: false 
+          text: "", 
+          isUser: false,
+          isTyping: true 
         }]);
-      }
+        
+        // Wait for typing animation
+        await new Promise(resolve => setTimeout(resolve, delay));
+        
+        // Remove typing indicator and show actual message
+        setMessages(prev => {
+          const filtered = prev.filter(msg => !msg.isTyping);
+          return [...filtered, { 
+            text: messageText, 
+            isUser: false,
+            isEmailBadge: isEmailBadge 
+          }];
+        });
+      };
       
-      // Display category as a message
-      if (analyzeResponse.category) {
-        const categoryText = `הקטגוריה שמצאנו: ${analyzeResponse.category}`;
-        setMessages(prev => [...prev, { 
-          text: categoryText, 
-          isUser: false 
-        }]);
-      }
-      
-      // Display explanation
-      if (explanation) {
-        setTimeout(() => {
-          setMessages(prev => [...prev, { 
-            text: explanation, 
-            isUser: false 
-          }]);
-        }, 500);
-      }
-      
-      // Display support line
-      if (supportLine) {
-        setTimeout(() => {
-          setMessages(prev => [...prev, { 
-            text: supportLine, 
-            isUser: false 
-          }]);
-        }, 1000);
-      }
-      
-      // Display email result (sent or failed)
-      if (emailReport) {
-        setTimeout(() => {
+      // Async function to display all messages with typing indicators
+      const displayResponseMessages = async () => {
+        // Display risk level and category together in one message with typing indicator
+        if (riskLevel || analyzeResponse.category) {
+          const parts = [];
+          if (riskLevel) {
+            parts.push(`רמת הסיכון שמצאנו: ${riskLevel}`);
+          }
+          if (analyzeResponse.category) {
+            parts.push(`הקטגוריה שמצאנו: ${analyzeResponse.category}`);
+          }
+          const combinedText = parts.join('\n');
+          await showMessageWithTyping(combinedText, 1000);
+        }
+        
+        // Display explanation with typing indicator (1 second delay between bubbles)
+        if (explanation) {
+          await showMessageWithTyping(explanation, 1000);
+        }
+        
+        // Display support line with typing indicator (1 second delay between bubbles)
+        if (supportLine) {
+          await showMessageWithTyping(supportLine, 1000);
+        }
+        
+        // Display email result (sent or failed) with typing indicator (1 second delay between bubbles)
+        if (emailReport) {
           if (emailReport.sent === true) {
             // Email sent successfully
-            setMessages(prev => [...prev, { 
-              text: "✅ נשלח מייל למבוגר אחראי", 
-              isUser: false,
-              isEmailBadge: true 
-            }]);
+            await showMessageWithTyping("✅ נשלח מייל למבוגר אחראי", 1000, true);
           } else if (emailReport.error) {
             // Email failed to send - show message and continue flow
-            setMessages(prev => [...prev, { 
-              text: "לא הצלחתי לשלוח את המייל כרגע, אבל נמשיך הלאה. את יכולה לנסות שוב מאוחר יותר.", 
-              isUser: false 
-            }]);
+            await showMessageWithTyping("לא הצלחתי לשלוח את המייל כרגע, אבל נמשיך הלאה. את יכולה לנסות שוב מאוחר יותר.", 1000);
           }
-        }, 1500);
-      }
+        }
+        
+        // Proceed to tone selection (reply options)
+        setTimeout(() => {
+          startToneSelection(replyOptions);
+        }, 500);
+      };
       
-      // Proceed to tone selection (reply options)
-      setTimeout(() => {
-        startToneSelection(replyOptions);
-      }, 2000);
+      // Call the async function
+      displayResponseMessages();
     }
     
     if (analyzeError && !analyzeLoading) {
