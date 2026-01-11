@@ -165,10 +165,61 @@ const ChatInterface = () => {
 
   // Handle when user clicks a chip
   const handleChipSelect = (value) => {
+    // Tone selection flow - check this FIRST before checking currentQuestion
+    if (isToneSelection) {
+      const toneKeyByLabel = {
+        "תגובה עדינה": "gentle",
+        "תגובה נחרצת": "assertive",
+        "לא להגיב": "noReply",
+      };
+      const selectedKey = toneKeyByLabel[value];
+      const replyText = replyOptionsData?.[selectedKey];
+
+      // Show user's choice
+      setMessages(prev => [...prev, { text: value, isUser: true }]);
+
+      // Clear all states to prevent any lingering input states
+      setIsWaitingForEmailInput(false);
+      setIsToneSelection(false);
+      setShowChips(false);
+      
+      // Show suggested reply from server with a delay
+      if (replyText && selectedKey !== "noReply") {
+        setTimeout(() => {
+          setMessages(prev => [...prev, { 
+            text: replyText, 
+            isUser: false 
+          }]);
+          // After showing the reply, show continuation prompt
+          setTimeout(() => {
+            showContinuationPrompt();
+          }, 1000);
+        }, 500);
+      } else if (selectedKey === "noReply") {
+        // If user chose not to reply, show acknowledgment and proceed
+        setTimeout(() => {
+          setMessages(prev => [...prev, { 
+            text: "הבנתי, זה בסדר גמור לא להגיב.", 
+            isUser: false 
+          }]);
+          setTimeout(() => {
+            showContinuationPrompt();
+          }, 1000);
+        }, 500);
+      } else {
+        // If no reply text available, show continuation prompt directly
+        setTimeout(() => {
+          showContinuationPrompt();
+        }, 500);
+      }
+      
+      return;
+    }
+    
     const currentQuestion = questions[currentQuestionIndex];
     
     // Handle email question chip selection
-    if (currentQuestion.key === 'trustedAdultEmail') {
+    if (currentQuestion && currentQuestion.key === 'trustedAdultEmail') {
       const displayText = Array.isArray(value) ? value.join(', ') : value;
       setMessages(prev => [...prev, { text: displayText, isUser: true }]);
       
@@ -204,55 +255,6 @@ const ChatInterface = () => {
       setShowChips(false);
       // Proceed to tone selection
       startToneSelection(replyOptionsData);
-      return;
-    }
-
-    // Tone selection flow
-    if (isToneSelection) {
-      const toneKeyByLabel = {
-        "תגובה עדינה": "gentle",
-        "תגובה נחרצת": "assertive",
-        "לא להגיב": "noReply",
-      };
-      const selectedKey = toneKeyByLabel[value];
-      const replyText = replyOptionsData?.[selectedKey];
-
-      // Show user's choice
-      setMessages(prev => [...prev, { text: value, isUser: true }]);
-
-      // Clear any lingering email input state
-      setIsWaitingForEmailInput(false);
-      
-      // Show suggested reply from server with a delay
-      if (replyText && selectedKey !== "noReply") {
-        setTimeout(() => {
-          setMessages(prev => [...prev, { 
-            text: replyText, 
-            isUser: false 
-          }]);
-          // After showing the reply, show continuation prompt
-          setTimeout(() => {
-            showContinuationPrompt();
-          }, 1000);
-        }, 500);
-      } else if (selectedKey === "noReply") {
-        // If user chose not to reply, show acknowledgment and proceed
-        setTimeout(() => {
-          setMessages(prev => [...prev, { 
-            text: "הבנתי, זה בסדר גמור לא להגיב.", 
-            isUser: false 
-          }]);
-          setTimeout(() => {
-            showContinuationPrompt();
-          }, 1000);
-        }, 500);
-      } else {
-        // If no reply text available, show continuation prompt directly
-        showContinuationPrompt();
-      }
-
-      setIsToneSelection(false);
-      setShowChips(false);
       return;
     }
 
