@@ -4,7 +4,6 @@ import ChipSelector from '../ChipSelector/ChipSelector';
 import MusicPlayer from '../MusicPlayer/MusicPlayer';
 import { AnalyzeContext } from '../../context/AnalyzeContext';
 import styles from './ChatInterface.module.css';
-import axiosInstance from '../../services/api';
 
 const ChatInterface = () => {
   // Use AnalyzeContext for backend API calls
@@ -43,6 +42,26 @@ const ChatInterface = () => {
   
   // Reference to scroll to bottom of chat
   const messagesEndRef = useRef(null);
+
+  // Display response text in chunks (simulates live typing)
+  const displayResponseInChunks = async (fullText) => {
+    // Split text into sentences (by periods, exclamation marks, question marks)
+    const sentences = fullText.split(/([.!?]\s+)/).filter(s => s.trim());
+    
+    for (let i = 0; i < sentences.length; i++) {
+      const sentence = sentences[i].trim();
+      if (sentence) {
+        setMessages(prev => [...prev, { 
+          text: sentence, 
+          isUser: false 
+        }]);
+        // Wait 1.5 seconds between sentences
+        if (i < sentences.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+      }
+    }
+  };
 
   // Define all questions we want to ask - MATCHED TO BACKEND REQUIREMENTS
   const questions = [
@@ -93,21 +112,6 @@ const ChatInterface = () => {
     }
   ];
 
-  // Resource options based on severity
-  const resourceOptions = {
-    mild: [
-      "עזרה עצמית - טכניקות הרגעה",
-      "משאבים מקוונים",
-      "קהילת תמיכה",
-      "טיפים להתמודדות"
-    ],
-    severe: [
-      "עזרה מקצועית - פניה למטפל",
-      "קווי חירום",
-      "תמיכה מיידית",
-      "ליווי מקצועי"
-    ]
-  };
 
   // Auto-scroll to bottom when new messages appear
   const scrollToBottom = () => {
@@ -323,7 +327,6 @@ const ChatInterface = () => {
 
   // Send collected data to backend
   const submitData = async (lastQuestionKey = null, lastQuestionValue = null) => {
-    setIsLoading(true);
     setShowChips(false);
     
     // Show loading message
@@ -344,23 +347,29 @@ const ChatInterface = () => {
       // Prepare data in the format the backend expects
       const messageText = completeUserData.messageText || "unspecified";
       
-      // Map channel values to English
+      // Backend expects Hebrew values for channel and senderType
+      // Map channel values to Hebrew (backend expects: "פרטי" | "קבוצה")
       const channelMap = {
-        "רשתות חברתיות": "social_media",
-        "קבוצה": "group",
-        "פרטי": "private"
+        "רשתות חברתיות": "קבוצה",  // Default to קבוצה for social media
+        "קבוצה": "קבוצה",
+        "פרטי": "פרטי"
       };
       
-      // Map senderType values to English
+      // Map senderType values to Hebrew (backend expects: "זר" | "מוכר")
       const senderTypeMap = {
-        "מישהו שאני מכירה": "known",
-        "זר": "unknown"
+        "מישהו שאני מכירה": "מוכר",
+        "זר": "זר"
       };
+      
+      // Backend expects feelings as array (Hebrew strings)
+      const feelings = completeUserData.feeling 
+        ? [completeUserData.feeling]  // Convert single feeling to array
+        : [];
       
       const context = {
-        channel: channelMap[completeUserData.channel] || "group",
-        senderType: senderTypeMap[completeUserData.senderType] || "unknown",
-        feeling: completeUserData.feeling || "unknown"
+        channel: channelMap[completeUserData.channel] || "קבוצה",
+        senderType: senderTypeMap[completeUserData.senderType] || "זר",
+        feelings: feelings  // Array of Hebrew feeling strings
       };
       
       // Build request payload as JSON
@@ -368,78 +377,22 @@ const ChatInterface = () => {
         nickname: completeUserData.userIdentifier || "anonymous",
         messageText,
         context,
-        trustedAdultEmail: completeUserData.trustedAdultEmail?.trim() || null
+        ResponsibleAdultEmail: completeUserData.trustedAdultEmail?.trim() || undefined  // Backend expects this field name
       };
+      
+      // Remove undefined fields
+      if (!requestPayload.ResponsibleAdultEmail) {
+        delete requestPayload.ResponsibleAdultEmail;
+      }
       
       console.log('trustedAdultEmail value:', completeUserData.trustedAdultEmail);
       console.log('Sending JSON to server:', JSON.stringify(requestPayload, null, 2));
       
-      // Send userData to backend endpoint
-      console.log('Making POST request to /reports...');
-      const response = await axiosInstance.post('/reports', requestPayload);
+      // Send userData to backend endpoint using AnalyzeContext
+      console.log('Making POST request to /api/reports...');
+      await analyzeMessage(requestPayload);
       
-      console.log('✅ Response received successfully!');
-      console.log('Response status:', response.status);
-      console.log('Response headers:', response.headers);
-      console.log('Response data type:', typeof response.data);
-      console.log('Response data keys:', Object.keys(response.data || {}));
-      
-      // Remove typing indicator
-      setMessages(prev => prev.filter(msg => !msg.isTyping));
-      
-      console.log('Full response from server:', JSON.stringify(response.data, null, 2));
-      console.log('Response explanation:', response.data?.explanation);
-      console.log('Response supportLine:', response.data?.supportLine);
-      console.log('Response riskLevel:', response.data?.riskLevel);
-      console.log('Response category:', response.data?.category);
-      
-      // ==========================================
-      // MAP SERVER RESPONSE TO CLIENT SEVERITY LEVELS
-      // ==========================================
-      // Server returns Hebrew riskLevel values
-      // Map to client severity: "severe" | "mild"
-      // Save reply options for tone selection
-      setReplyOptionsData(response.data?.replyOptions || null);
-
-      // Define high-risk: Hebrew "גבוה"
-      const isHighRisk = response.data?.riskLevel === "גבוה";
-      const responseSeverity = isHighRisk ? "severe" : "mild";
-      setSeverity(responseSeverity);
-      severityRef.current = responseSeverity;
-      
-      // ==========================================
-      // DISPLAY SERVER RESPONSE
-      // ==========================================
-      // Display explanation and supportLine as separate messages for better readability
-      if (response.data?.explanation) {
-        console.log('Adding explanation message to chat');
-        setMessages(prev => [...prev, { 
-          text: response.data.explanation, 
-          isUser: false 
-        }]);
-        
-        // Add support line as a separate message if it exists
-        if (response.data.supportLine) {
-          await new Promise(resolve => setTimeout(resolve, 800));
-          console.log('Adding support line message to chat');
-          setMessages(prev => [...prev, { 
-            text: response.data.supportLine, 
-            isUser: false 
-          }]);
-        }
-      } else {
-        console.error('No explanation in response!');
-        setMessages(prev => [...prev, { 
-          text: "קיבלתי את המידע שלך, אבל הייתה בעיה בעיבוד. נסי שוב או פני לעזרה מקצועית.", 
-          isUser: false 
-        }]);
-      }
-      
-      // ==========================================
-      // PROCEED TO TONE SELECTION
-      // ==========================================
-      // Proceed directly to tone selection
-      await startToneSelection(response.data?.replyOptions);
+      // Response will be handled by useEffect hook that watches analyzeResponse
     } catch (error) {
       console.error('❌ Error submitting data:', error);
       console.error('Error type:', error.constructor.name);
@@ -482,13 +435,28 @@ const ChatInterface = () => {
       // Remove typing indicator
       setMessages(prev => prev.filter(msg => !msg.isTyping));
       
-      // Backend returns: { riskLevel, category, explanation, replyOptions, supportLine, userId, nickname, reportId, createdAt }
-      const { riskLevel, explanation, replyOptions, supportLine } = analyzeResponse;
+      // Backend returns: { riskLevel, category, explanation, replyOptions, supportLine, userId, nickname, reportId, createdAt, emailReport }
+      const { riskLevel, explanation, replyOptions, supportLine, emailReport } = analyzeResponse;
+      
+      // Log email report status if available
+      if (emailReport) {
+        console.log('Email report status:', emailReport);
+        if (emailReport.sent) {
+          console.log('✅ Email sent successfully to responsible adult');
+        } else if (emailReport.error) {
+          console.warn('⚠️ Email failed to send:', emailReport.error);
+        }
+      }
+      
+      // Save reply options for tone selection
+      setReplyOptionsData(replyOptions || null);
       
       // Map riskLevel to severity for resource selection
       // Backend returns Hebrew: "גבוה"/"בינוני"/"נמוך"
       // High/Medium = severe, Low = mild
       const severity = (riskLevel === "גבוה" || riskLevel === "בינוני") ? "severe" : "mild";
+      setSeverity(severity);
+      severityRef.current = severity;
       
       // Display explanation as main response
       if (explanation) {
@@ -522,10 +490,10 @@ const ChatInterface = () => {
         // Create detailed error message
         let errorMsg = "סליחה, הייתה שגיאה בחיבור לשרת. ";
         
-        if (error.response) {
+        if (analyzeError.response) {
           // Server responded with error
-          errorMsg += `השרת החזיר שגיאה (קוד ${error.response.status}).`;
-        } else if (error.request) {
+          errorMsg += `השרת החזיר שגיאה (קוד ${analyzeError.response.status}).`;
+        } else if (analyzeError.request) {
           // Request made but no response
           errorMsg += "השרת לא הגיב. אנא ודאי שהשרת פועל.";
         } else {
@@ -538,10 +506,9 @@ const ChatInterface = () => {
           isUser: false 
         }];
       });
-    } finally {
-      setIsLoading(false);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analyzeResponse, analyzeLoading, analyzeError]);
 
   // Show follow-up with music and resources (replyOptions from backend)
   const showFollowUpResources = async (severityLevel, replyOptions) => {
@@ -601,7 +568,7 @@ const ChatInterface = () => {
 
   // Determine what to show: text input or chips
   const currentQuestion = questions[currentQuestionIndex];
-  const showTextInput = !showFollowUp && !isToneSelection && ((currentQuestion && currentQuestion.type === "text" && !isLoading) || isWaitingForEmailInput);
+  const showTextInput = !showFollowUp && !isToneSelection && ((currentQuestion && currentQuestion.type === "text" && !analyzeLoading) || isWaitingForEmailInput);
 
   return (
     <div className={styles.chatContainer}>

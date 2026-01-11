@@ -160,7 +160,8 @@ userHistorySummary:
 
 
       let emailReport = null;
-      const shouldReport = ResponsibleAdultEmail && parsed.riskLevel === "High";
+      // Backend returns Hebrew riskLevel: "גבוה" | "בינוני" | "נמוך"
+      const shouldReport = ResponsibleAdultEmail && parsed.riskLevel === "גבוה";
 
       if (shouldReport) {
           try {
