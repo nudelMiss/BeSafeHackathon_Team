@@ -186,61 +186,6 @@ const ChatInterface = () => {
     // Move to next question, passing the current answer to handle last question
     moveToNextQuestion(currentQuestion.key, text.trim());
   };
-  
-  // Handle follow-up question from user
-  const handleFollowUpQuestion = async (followUpText) => {
-    // Show loading message
-    setMessages(prev => [...prev, { text: "אני מעבדת את ההודעה שלך...", isUser: false, isTyping: true }]);
-    
-    try {
-      // Map channel values to Hebrew (same as in submitData)
-      const channelMap = {
-        "רשתות חברתיות": "קבוצה",
-        "קבוצה": "קבוצה",
-        "פרטי": "פרטי"
-      };
-      
-      // Map senderType values to Hebrew (same as in submitData)
-      const senderTypeMap = {
-        "מישהו שאני מכירה": "מוכר",
-        "זר": "זר"
-      };
-      
-      // Prepare request with follow-up question
-      // Use existing user data but replace messageText with follow-up question
-      // Backend expects feelings as array (Hebrew strings)
-      // feeling is already an array if multiple selection was used
-      const feelings = Array.isArray(userData.feeling) 
-        ? userData.feeling.filter(f => f && f.trim())  // Already an array, filter empty values
-        : (userData.feeling ? [userData.feeling] : []);  // Single value, convert to array
-      
-      const requestPayload = {
-        nickname: userData.userIdentifier || "anonymous",
-        messageText: followUpText,
-        context: {
-          channel: channelMap[userData.channel] || "קבוצה",
-          senderType: senderTypeMap[userData.senderType] || "זר",
-          feelings: feelings
-        }
-      };
-      
-      console.log('Sending follow-up question to server:', JSON.stringify(requestPayload, null, 2));
-      
-      // Send to backend
-      await analyzeMessage(requestPayload);
-      
-      // Response will be handled by useEffect hook that watches analyzeResponse
-    } catch (error) {
-      console.error('❌ Error submitting follow-up question:', error);
-      setMessages(prev => {
-        const filtered = prev.filter(msg => !msg.isTyping);
-        return [...filtered, { 
-          text: "סליחה, הייתה שגיאה בשליחת הבקשה. נסי שוב.",
-          isUser: false 
-        }];
-      });
-    }
-  };
 
   // Handle when user clicks a chip
   const handleChipSelect = (value) => {
@@ -428,10 +373,10 @@ const ChatInterface = () => {
             : userData.userIdentifier;
           
           if (nickname) {
-            questionText = `היי ${nickname}, מה שלומך? איך את מרגישה עכשיו? (אפשר לבחור כמה רגשות)`;
+            questionText = `היי ${nickname} איך את מרגישה עכשיו? את יכולה לבחור כמה רגשות שמתאימים למה שעובר עלייך `;
           } else {
             // Fallback if nickname not available yet
-            questionText = "היי, מה שלומך? איך את מרגישה עכשיו? (אפשר לבחור כמה רגשות)";
+            questionText = "איך את מרגישה עכשיו? את יכולה לבחור כמה רגשות שמתאימים למה שעובר עלייך";
           }
         }
         
