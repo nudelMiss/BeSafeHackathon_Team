@@ -28,7 +28,6 @@ const ChatInterface = () => {
   const [allowMultipleSelection, setAllowMultipleSelection] = useState(false);
   
   // Track if we're in the follow-up phase (after initial response)
-  const [showFollowUp, setShowFollowUp] = useState(false);
   // Track special interaction modes
   const [isParentConsentPrompt, setIsParentConsentPrompt] = useState(false);
   const [isToneSelection, setIsToneSelection] = useState(false);
@@ -47,24 +46,24 @@ const ChatInterface = () => {
   const messagesEndRef = useRef(null);
 
   // Display response text in chunks (simulates live typing)
-  const displayResponseInChunks = async (fullText) => {
-    // Split text into sentences (by periods, exclamation marks, question marks)
-    const sentences = fullText.split(/([.!?]\s+)/).filter(s => s.trim());
+  // const displayResponseInChunks = async (fullText) => {
+  //   // Split text into sentences (by periods, exclamation marks, question marks)
+  //   const sentences = fullText.split(/([.!?]\s+)/).filter(s => s.trim());
     
-    for (let i = 0; i < sentences.length; i++) {
-      const sentence = sentences[i].trim();
-      if (sentence) {
-        setMessages(prev => [...prev, { 
-          text: sentence, 
-          isUser: false 
-        }]);
-        // Wait 1.5 seconds between sentences
-        if (i < sentences.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1500));
-        }
-      }
-    }
-  };
+  //   for (let i = 0; i < sentences.length; i++) {
+  //     const sentence = sentences[i].trim();
+  //     if (sentence) {
+  //       setMessages(prev => [...prev, { 
+  //         text: sentence, 
+  //         isUser: false 
+  //       }]);
+  //       // Wait 1.5 seconds between sentences
+  //       if (i < sentences.length - 1) {
+  //         await new Promise(resolve => setTimeout(resolve, 1500));
+  //       }
+  //     }
+  //   }
+  // };
 
   // Define all questions we want to ask - MATCHED TO BACKEND REQUIREMENTS
   const questions = [
@@ -686,7 +685,7 @@ const ChatInterface = () => {
 
   // Determine what to show: text input or chips
   const currentQuestion = questions[currentQuestionIndex];
-  const showTextInput = !showFollowUp && !isToneSelection && !isContinuationPrompt && ((currentQuestion && currentQuestion.type === "text" && !analyzeLoading) || isWaitingForEmailInput || isFollowUpHelp);
+  const showTextInput = !isToneSelection && !isContinuationPrompt && ((currentQuestion && currentQuestion.type === "text" && !analyzeLoading) || isWaitingForEmailInput || isFollowUpHelp);
 
   return (
     <div className={styles.chatContainer}>
@@ -708,12 +707,12 @@ const ChatInterface = () => {
           <div className={styles.chipWrapper}>
             <ChipSelector
               options={currentOptions}
-              onSelect={showFollowUp ? handleResourceSelect : handleChipSelect}
-              selectedValue={showFollowUp ? null : (userData[currentQuestion?.key] || (allowMultipleSelection ? [] : null))}
-              multiple={allowMultipleSelection && !showFollowUp}
+              onSelect={handleChipSelect}
+              selectedValue={(userData[currentQuestion?.key] || (allowMultipleSelection ? [] : null))}
+              multiple={allowMultipleSelection}
             />
             {/* Show "Done" button for multiple selection */}
-            {allowMultipleSelection && !showFollowUp && Array.isArray(userData[currentQuestion?.key]) && userData[currentQuestion?.key].length > 0 && (
+            {allowMultipleSelection && Array.isArray(userData[currentQuestion?.key]) && userData[currentQuestion?.key].length > 0 && (
               <button
                 onClick={handleMultipleSelectionDone}
                 className={styles.doneButton}
