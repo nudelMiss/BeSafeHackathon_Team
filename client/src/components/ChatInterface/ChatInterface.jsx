@@ -5,6 +5,7 @@ import MusicPlayer from '../MusicPlayer/MusicPlayer';
 import { AnalyzeContext } from '../../context/AnalyzeContext';
 import api from '../../services/api';
 import styles from './ChatInterface.module.css';
+import logo from '../../assets/logo.png';
 
 const ChatInterface = () => {
   // Use AnalyzeContext for backend API calls
@@ -922,17 +923,25 @@ const ChatInterface = () => {
     <div className={styles.chatContainer}>
       <div className={styles.messagesContainer}>
         {/* Display all messages */}
-        {messages.map((msg, index) => (
-          <div key={index} className={styles.messageWrapper}>
-            <ChatBubble 
-              message={msg.text} 
-              isUser={msg.isUser} 
-              isTyping={msg.isTyping}
-              isEmailBadge={msg.isEmailBadge}
-              typingText={msg.typingText || "חושבת"}
-            />
-          </div>
-        ))}
+        {messages.map((msg, index) => {
+          // Determine if this is the first bot message in a sequence
+          const isPreviousUserMessage = index === 0 || messages[index - 1].isUser;
+          const showAvatarForThisMessage = !msg.isUser && isPreviousUserMessage;
+          
+          return (
+            <div key={index} className={styles.messageWrapper}>
+              <ChatBubble 
+                message={msg.text} 
+                isUser={msg.isUser} 
+                isTyping={msg.isTyping}
+                isEmailBadge={msg.isEmailBadge}
+                typingText={msg.typingText || "חושבת"}
+                avatar={logo}
+                showAvatar={showAvatarForThisMessage}
+              />
+            </div>
+          );
+        })}
         
         {/* Show chips if current question uses them */}
         {showChips && currentOptions.length > 0 && (
