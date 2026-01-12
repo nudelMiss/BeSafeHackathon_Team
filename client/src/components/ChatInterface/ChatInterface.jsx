@@ -205,7 +205,6 @@ const ChatInterface = () => {
       const selectedKey = toneKeyByLabel[value];
       const replyText = replyOptionsData?.[selectedKey];
       const riskLevel = analyzeResponse?.riskLevel;
-      const category = analyzeResponse?.category;
 
       // Show user's choice
       setMessages(prev => [...prev, { text: value, isUser: true }]);
@@ -611,16 +610,19 @@ const ChatInterface = () => {
   // Show continuation prompt after user selects reply option
   const showContinuationPrompt = () => {
     // Show email status summary before continuation prompt if email was requested
+    // Get emailReportStatus from analyzeResponse if available
+    const currentEmailReport = analyzeResponse?.emailReport;
+    
     if (userData.trustedAdultEmail && userData.trustedAdultEmail.trim() !== "") {
       // User provided an email, show status
-      if (emailReportStatus) {
-        if (emailReportStatus.sent === true) {
+      if (currentEmailReport) {
+        if (currentEmailReport.sent === true) {
           setMessages(prev => [...prev, { 
             text: "📧 סיכום: נשלח מייל למבוגר אחראי עם פרטי הדיווח", 
             isUser: false,
             isEmailBadge: true
           }]);
-        } else if (emailReportStatus.error) {
+        } else if (currentEmailReport.error) {
           setMessages(prev => [...prev, { 
             text: "📧 סיכום: לא הצלחתי לשלוח את המייל למבוגר אחראי. את יכולה לנסות שוב מאוחר יותר.", 
             isUser: false 
@@ -794,7 +796,7 @@ const ChatInterface = () => {
 
   // Determine what to show: text input or chips
   const currentQuestion = questions[currentQuestionIndex];
-  const showTextInput = !showFollowUp && !isToneSelection && !isContinuationPrompt && ((currentQuestion && currentQuestion.type === "text" && !analyzeLoading) || isWaitingForEmailInput);
+  const showTextInput = !isToneSelection && !isContinuationPrompt && ((currentQuestion && currentQuestion.type === "text" && !analyzeLoading) || isWaitingForEmailInput);
 
   return (
     <div className={styles.chatContainer}>
