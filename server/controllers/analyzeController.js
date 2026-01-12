@@ -54,7 +54,7 @@ export const analyzeMessage = async (req, res) => {
         let toneInstruction = "";
         if (reportCount >= 1) {
             toneInstruction = `
-הערה חשובה: זו אינה הפעם הראשונה שהמשתמשת משתמשת במערכת.
+הערה חשובה: זו אינה הפעם הראשונהשתמשת משתמשת במערכת.
 יש להתאים את התשובות כך שיהיו פחות מתנצלות ויותר ברורות ומגינות.
 - gentle: עדיין מנומס, אבל מציב גבול חד.
 - assertive: חד, קצר, לא משאיר מקום למשא ומתן.
@@ -77,33 +77,6 @@ export const analyzeMessage = async (req, res) => {
 את עוזרת דיגיטלית לבטיחות ברשת.
 נתון: messageText + context { channel: "פרטי"|"קבוצה", senderType: "זר"|"מוכר", feelings: string[] }.
 שדה feelings הוא רשימת רגשות בעברית (יכול להיות רגש אחד או יותר).
-
-בנוסף, ייתכן ויצורף שדה נוסף בשם extraContext.
-שדה זה מכיל מידע רקע נוסף על המשתמשת או הסיטואציה (למשל גיל משוער, פלטפורמה, חזרתיות, דפוסי התנהגות קודמים, חסימות קודמות, תחושת איום מצטברת וכדומה).
-
-כאשר קיים extraContext:
-
-- יש להתייחס ל־extraContext כמידע מהימן על מצב המשתמשת והסיטואציה.
-- יש להשתמש בו כדי:
-  - להחמיר את riskLevel במידת הצורך
-  - לזהות דפוסים חוזרים גם אם messageText בודד נראה "תמים"
-  - להתאים את הטון, ההמלצות ורמת הישירות של התשובות
-
-- דוגמאות לשדות אפשריים ב־extraContext:
-  {
-    "age": number,
-    "isMinor": boolean,
-    "platform": string,
-    "repeatedContact": boolean,
-    "blockedBefore": boolean,
-    "priorReports": number,
-    "trustedAdultAvailable": boolean,
-    "feelsThreatened": boolean
-  }
-
-- אם extraContext מצביע על קטינות, חזרתיות, איום מצטבר או חסימות קודמות —
-  יש להעדיף riskLevel = "גבוה" גם אם messageText לבדו נראה מתון.
-
 
 החזירי JSON בלבד (בלי טקסט מסביב, בלי markdown) בפורמט המדויק:
 {
@@ -151,9 +124,16 @@ export const analyzeMessage = async (req, res) => {
 ${toneInstruction}
 `.trim();
 
+        // Build the user prompt with messageText and optional extraContext
+        let messageSection = `messageText:\n"""${messageText}"""`;
+        
+        // If extraContext is provided, attach it after the messageText as additional information
+        if (extraContext && extraContext.trim()) {
+            messageSection += `\n\nמידע נוסף על ההודעהשתמשת שיתפה:\n"""${extraContext.trim()}"""`;
+        }
+        
         const userPrompt = `
-messageText:
-"""${messageText}"""
+${messageSection}
 
 context:
 ${JSON.stringify(contextWithFeelings)}
@@ -165,22 +145,11 @@ userHistorySummary:
 }
 `.trim();
 
-
-        const hasExtraContext =
-            extraContext &&
-            typeof extraContext === "object" &&
-            Object.keys(extraContext).length > 0;
-
-        const finalUserPrompt = hasExtraContext
-            ? `${userPrompt}\n\nextraContext:\n${JSON.stringify(extraContext)}`
-            : userPrompt;
-
-
         const aiResponse = await openai.responses.create({
             model: "gpt-4o-mini",
             input: [
                 { role: "system", content: systemPrompt },
-                { role: "user", content: finalUserPrompt },
+                { role: "user", content: userPrompt },
             ],
             temperature: 0.2,
         });
@@ -196,14 +165,13 @@ userHistorySummary:
             });
         }
 
-
         let emailReport = null;
         // Backend returns Hebrew riskLevel: "גבוה" | "בינוני" | "נמוך"
         const shouldReport = ResponsibleAdultEmail && parsed.riskLevel === "גבוה";
 
         if (shouldReport) {
             try {
-                const emailContent = buildResponsibleAdultEmail(parsed, user.nickname || "המשתמשת");
+                const emailContent = buildResponsibleAdultEmail(parsed, user.nickname || "שתמשת");
                 await sendResponsibleAdultEmail(ResponsibleAdultEmail, emailContent.subject, emailContent.body)
                 emailReport = {sent : true} ;
             } catch (error) {
@@ -221,6 +189,12 @@ userHistorySummary:
             analysis: parsed,
             createdAt: new Date().toISOString().replace("T", " ").split(".")[0],
         };
+        
+        // Add extraContext only if provided
+        if (extraContext && extraContext.trim()) {
+            report.extraContext = extraContext.trim();
+            console.log('✅ Saved extraContext in report:', report.extraContext);
+        }
 
         try {
             await addReport(user.id, report);

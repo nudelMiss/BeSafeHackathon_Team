@@ -881,7 +881,7 @@ const ChatInterface = () => {
     setIsContinuationPrompt(false);
     
     if (choice === "לסיים לעת עתה") {
-      // User wants to close chat - show closing message and music player directly
+      // User wants to close chat - show closing message and music player
       setTimeout(() => {
         setMessages(prev => [...prev, { 
           text: "זה בסדר גמור. אני כאן מתי שתרצי לחזור 💙", 
