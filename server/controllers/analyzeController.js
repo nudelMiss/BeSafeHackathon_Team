@@ -10,7 +10,7 @@ import {sendResponsibleAdultEmail} from "../services/ResponsibleAdultEmailServic
 
 export const analyzeMessage = async (req, res) => {
   try {
-    const { nickname, messageText, context, ResponsibleAdultEmail } = req.body;
+    const { nickname, messageText, context, ResponsibleAdultEmail, extraContext } = req.body;
 
     if (!messageText || !context) {
       return res.status(400).json({ responseText: "חסר messageText או context" });
@@ -124,9 +124,16 @@ export const analyzeMessage = async (req, res) => {
 ${toneInstruction}
 `.trim();
 
+    // Build the user prompt with messageText and optional extraContext
+    let messageSection = `messageText:\n"""${messageText}"""`;
+    
+    // If extraContext is provided, attach it after the messageText as additional information
+    if (extraContext && extraContext.trim()) {
+      messageSection += `\n\nמידע נוסף על ההודעהשתמשת שיתפה:\n"""${extraContext.trim()}"""`;
+    }
+    
     const userPrompt = `
-messageText:
-"""${messageText}"""
+${messageSection}
 
 context:
 ${JSON.stringify(contextWithFeelings)}
@@ -183,6 +190,12 @@ userHistorySummary:
       analysis: parsed,
       createdAt: new Date().toISOString().replace("T", " ").split(".")[0],
     };
+    
+    // Add extraContext only if provided
+    if (extraContext && extraContext.trim()) {
+      report.extraContext = extraContext.trim();
+      console.log('✅ Saved extraContext in report:', report.extraContext);
+    }
 
     try {
       await addReport(user.id, report);
