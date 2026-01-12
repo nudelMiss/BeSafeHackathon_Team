@@ -5,6 +5,7 @@
   margin-bottom: 12px;
   word-wrap: break-word;
   animation: fadeIn 0.3s ease-in;
+  direction: rtl;
 }
 
 @keyframes fadeIn {
