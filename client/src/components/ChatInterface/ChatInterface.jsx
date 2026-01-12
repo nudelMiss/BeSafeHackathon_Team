@@ -308,19 +308,18 @@ const ChatInterface = () => {
     // Save the selected value in userData
     setUserData(prev => ({ ...prev, [currentQuestion.key]: value }));
 
-    // Show user's selection as a message
-    // For multiple selection, show array as comma-separated
-    const displayText = Array.isArray(value) ? value.join(', ') : value;
-    const userMessage = { text: displayText, isUser: true };
-    setMessages(prev => [...prev, userMessage]);
-    
-    // For single selection, hide chips and move to next question
-    // For multiple selection, keep chips visible until user is done
+    // For single selection, show message immediately and move to next question
+    // For multiple selection, don't show message yet - wait for "done" button
     if (!currentQuestion.multiple) {
+      // Show user's selection as a message
+      const displayText = Array.isArray(value) ? value.join(', ') : value;
+      const userMessage = { text: displayText, isUser: true };
+      setMessages(prev => [...prev, userMessage]);
+      
       setShowChips(false);
       moveToNextQuestion();
     }
-    // If multiple selection, chips stay visible - user can add more or we wait for "done" button
+    // If multiple selection, chips stay visible - user can add more selections
   };
 
   // Start tone selection stage
@@ -339,6 +338,16 @@ const ChatInterface = () => {
 
   // Handle when user is done with multiple selection
   const handleMultipleSelectionDone = () => {
+    // Get the current question and all selected values
+    const currentQuestion = questions[currentQuestionIndex];
+    const selectedValues = userData[currentQuestion.key];
+    
+    // Add single combined message with all selections
+    if (selectedValues && Array.isArray(selectedValues) && selectedValues.length > 0) {
+      const displayText = selectedValues.join(', ');
+      setMessages(prev => [...prev, { text: displayText, isUser: true }]);
+    }
+    
     setShowChips(false);
     moveToNextQuestion();
   };
