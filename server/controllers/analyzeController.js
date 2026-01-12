@@ -7,6 +7,7 @@ import {
 } from "../services/reportStore.js";
 import {buildResponsibleAdultEmail} from "../utils/buildResponsibleAdultEmail.js";
 import {sendResponsibleAdultEmail} from "../services/ResponsibleAdultEmailService.js";
+import { buildProfessionalHelp } from "../utils/professionalHelp.js";
 
 export const analyzeMessage = async (req, res) => {
   try {
@@ -158,6 +159,8 @@ userHistorySummary:
       });
     }
 
+    const professionalHelp = buildProfessionalHelp(parsed, contextWithFeelings);
+
 
       let emailReport = null;
       // Backend returns Hebrew riskLevel: "גבוה" | "בינוני" | "נמוך"
@@ -190,8 +193,11 @@ userHistorySummary:
       console.error("Failed to save report:", e);
     }
 
+
+
     return res.status(200).json({
       ...parsed,
+      professionalHelp,
       userId: user.id,
       nickname: user.nickname,
       reportId: report.id,

@@ -139,3 +139,6 @@ server/data/*.json
 # Note: package-lock.json files SHOULD be committed for dependency consistency
 # They are only auto-generated when dependencies change, not on every run
 
+# Server data (local reports storage)
+server/data/
+
