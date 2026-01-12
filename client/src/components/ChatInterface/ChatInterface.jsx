@@ -36,6 +36,7 @@ const ChatInterface = () => {
   const [showMusicPlayer, setShowMusicPlayer] = useState(false);
   const [replyOptionsData, setReplyOptionsData] = useState(null);
   const [isWaitingForEmailInput, setIsWaitingForEmailInput] = useState(false);
+  const [isExtraContextQuestion, setIsExtraContextQuestion] = useState(false);
   
   // Store severity from backend (for resource selection)
   // eslint-disable-next-line no-unused-vars
@@ -135,6 +136,11 @@ const ChatInterface = () => {
       key: "senderType",
       multiple: false,
       options: ["מישהו שאני מכירה", "זר"]
+    },
+    {
+      text: "אם יש משהו נוסף שתרצי לשתף בהקשר להודעה – זה המקום. אם לא, פשוט לחצי על 'המשיכי' 💗",
+      type: "text",
+      key: "extraContext"
     }
   ];
 
@@ -160,11 +166,18 @@ const ChatInterface = () => {
 
   // Handle when user submits text input
   const handleTextSubmit = (text) => {
-    if (!text.trim()) return;  // Don't submit empty text
+    const currentQuestion = questions[currentQuestionIndex];
+    
+    // For extraContext, allow empty text (it's optional)
+    if (!text.trim() && currentQuestion?.key !== 'extraContext') {
+      return;  // Don't submit empty text for other questions
+    }
 
-    // Add user's message to chat
-    const userMessage = { text: text.trim(), isUser: true };
-    setMessages(prev => [...prev, userMessage]);
+    // Add user's message to chat (only if text is not empty)
+    if (text.trim()) {
+      const userMessage = { text: text.trim(), isUser: true };
+      setMessages(prev => [...prev, userMessage]);
+    }
     
     // If we were waiting for email input, handle it specially
     if (isWaitingForEmailInput) {
@@ -174,79 +187,39 @@ const ChatInterface = () => {
       return;
     }
     
-    // Save the answer in userData object
-    const currentQuestion = questions[currentQuestionIndex];
-    console.log('Saving text input - Question:', currentQuestion.text, 'Key:', currentQuestion.key, 'Value:', text.trim());
+    // Save the answer in userData object (empty string is allowed for extraContext)
+    const valueToSave = text.trim() || '';
+    console.log('Saving text input - Question:', currentQuestion.text, 'Key:', currentQuestion.key, 'Value:', valueToSave);
     setUserData(prev => {
-      const updated = { ...prev, [currentQuestion.key]: text.trim() };
+      const updated = { ...prev, [currentQuestion.key]: valueToSave };
       console.log('Updated userData:', updated);
       return updated;
     });
 
+    // Reset extraContext question flag
+    if (currentQuestion?.key === 'extraContext') {
+      setIsExtraContextQuestion(false);
+    }
+
     // Move to next question, passing the current answer to handle last question
-    moveToNextQuestion(currentQuestion.key, text.trim());
+    moveToNextQuestion(currentQuestion.key, valueToSave);
   };
   
-  // Handle follow-up question from user
-  const handleFollowUpQuestion = async (followUpText) => {
-    // Show loading message
-    setMessages(prev => [...prev, { text: "אני מעבדת את ההודעה שלך...", isUser: false, isTyping: true }]);
-    
-    try {
-      // Map channel values to Hebrew (same as in submitData)
-      const channelMap = {
-        "רשתות חברתיות": "קבוצה",
-        "קבוצה": "קבוצה",
-        "פרטי": "פרטי"
-      };
-      
-      // Map senderType values to Hebrew (same as in submitData)
-      const senderTypeMap = {
-        "מישהו שאני מכירה": "מוכר",
-        "זר": "זר"
-      };
-      
-      // Prepare request with follow-up question
-      // Use existing user data but replace messageText with follow-up question
-      // Backend expects feelings as array (Hebrew strings)
-      // feeling is already an array if multiple selection was used
-      const feelings = Array.isArray(userData.feeling) 
-        ? userData.feeling.filter(f => f && f.trim())  // Already an array, filter empty values
-        : (userData.feeling ? [userData.feeling] : []);  // Single value, convert to array
-      
-      const requestPayload = {
-        nickname: userData.userIdentifier || "anonymous",
-        messageText: followUpText,
-        context: {
-          channel: channelMap[userData.channel] || "קבוצה",
-          senderType: senderTypeMap[userData.senderType] || "זר",
-          feelings: feelings
-        }
-      };
-      
-      console.log('Sending follow-up question to server:', JSON.stringify(requestPayload, null, 2));
-      
-      // Send to backend
-      await analyzeMessage(requestPayload);
-      
-      // Response will be handled by useEffect hook that watches analyzeResponse
-    } catch (error) {
-      console.error('❌ Error submitting follow-up question:', error);
-      setMessages(prev => {
-        const filtered = prev.filter(msg => !msg.isTyping);
-        return [...filtered, { 
-          text: "סליחה, הייתה שגיאה בשליחת הבקשה. נסי שוב.",
-          isUser: false 
-        }];
-      });
-    }
-  };
-
   // Handle when user clicks a chip
   const handleChipSelect = (value) => {
     // Continuation prompt flow - check this FIRST
     if (isContinuationPrompt) {
       handleContinuationChoice(value);
+      return;
+    }
+    
+    // Handle "המשיכי" chip for extraContext question
+    if (isExtraContextQuestion && value === "המשיכי") {
+      setMessages(prev => [...prev, { text: "המשיכי", isUser: true }]);
+      setUserData(prev => ({ ...prev, extraContext: "" }));
+      setIsExtraContextQuestion(false);
+      setShowChips(false);
+      moveToNextQuestion('extraContext', "");
       return;
     }
     
@@ -418,22 +391,8 @@ const ChatInterface = () => {
       
       // Show next question after a short delay (feels more natural)
       setTimeout(() => {
-        // Special handling for feeling question - use nickname
-        // Check if the last question was userIdentifier, if so use lastQuestionValue
-        // Otherwise, get from current userData state
+        // Use the question text as-is (no special personalization needed)
         let questionText = nextQuestion.text;
-        if (nextQuestion.key === 'feeling') {
-          const nickname = (lastQuestionKey === 'userIdentifier' && lastQuestionValue) 
-            ? lastQuestionValue 
-            : userData.userIdentifier;
-          
-          if (nickname) {
-            questionText = `היי ${nickname}, מה שלומך? איך את מרגישה עכשיו? (אפשר לבחור כמה רגשות)`;
-          } else {
-            // Fallback if nickname not available yet
-            questionText = "היי, מה שלומך? איך את מרגישה עכשיו? (אפשר לבחור כמה רגשות)";
-          }
-        }
         
         setMessages(prev => [...prev, { text: questionText, isUser: false }]);
         
@@ -448,6 +407,12 @@ const ChatInterface = () => {
           setAllowMultipleSelection(nextQuestion.multiple || false);
         } else {
           setAllowMultipleSelection(false);
+          // For extraContext question, show "המשיכי" chip option
+          if (nextQuestion.key === 'extraContext') {
+            setIsExtraContextQuestion(true);
+            setCurrentOptions(["המשיכי"]);
+            setShowChips(true);
+          }
         }
       }, 500);
     } else {
@@ -510,12 +475,16 @@ const ChatInterface = () => {
         nickname: completeUserData.userIdentifier || "anonymous",
         messageText,
         context,
-        ResponsibleAdultEmail: completeUserData.trustedAdultEmail?.trim() || undefined  // Backend expects this field name
+        ResponsibleAdultEmail: completeUserData.trustedAdultEmail?.trim() || undefined,  // Backend expects this field name
+        extraContext: completeUserData.extraContext?.trim() || undefined  // Optional extra context
       };
       
       // Remove undefined fields
       if (!requestPayload.ResponsibleAdultEmail) {
         delete requestPayload.ResponsibleAdultEmail;
+      }
+      if (!requestPayload.extraContext) {
+        delete requestPayload.extraContext;
       }
       
       console.log('trustedAdultEmail value:', completeUserData.trustedAdultEmail);
@@ -860,7 +829,7 @@ const ChatInterface = () => {
 
   // Determine what to show: text input or chips
   const currentQuestion = questions[currentQuestionIndex];
-  const showTextInput = !isToneSelection && !isContinuationPrompt && ((currentQuestion && currentQuestion.type === "text" && !analyzeLoading) || isWaitingForEmailInput);
+      const showTextInput = !isToneSelection && !isContinuationPrompt && ((currentQuestion && currentQuestion.type === "text" && !analyzeLoading) || isWaitingForEmailInput);
 
   return (
     <div className={styles.chatContainer}>
@@ -926,7 +895,7 @@ const ChatInterface = () => {
               setInputText('');
             }}
             className={styles.sendButton}
-            disabled={analyzeLoading || !inputText.trim()}
+            disabled={analyzeLoading || (!inputText.trim() && !isExtraContextQuestion)}
           >
             שלחי
           </button>
