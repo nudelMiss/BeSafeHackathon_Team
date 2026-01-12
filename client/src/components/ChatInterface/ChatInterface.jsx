@@ -37,6 +37,7 @@ const ChatInterface = () => {
   const [replyOptionsData, setReplyOptionsData] = useState(null);
   const [isWaitingForEmailInput, setIsWaitingForEmailInput] = useState(false);
   const [isExtraContextQuestion, setIsExtraContextQuestion] = useState(false);
+  const [isNewReportPrompt, setIsNewReportPrompt] = useState(false);
   
   // Store severity from backend (for resource selection)
   // eslint-disable-next-line no-unused-vars
@@ -207,7 +208,13 @@ const ChatInterface = () => {
   
   // Handle when user clicks a chip
   const handleChipSelect = (value) => {
-    // Continuation prompt flow - check this FIRST
+    // New report prompt flow - check this FIRST
+    if (isNewReportPrompt) {
+      handleNewReportChoice(value);
+      return;
+    }
+    
+    // Continuation prompt flow - check this SECOND
     if (isContinuationPrompt) {
       handleContinuationChoice(value);
       return;
@@ -696,7 +703,7 @@ const ChatInterface = () => {
       }]);
       
       // Set continuation options
-      setCurrentOptions(["לראות סיכום הדיווחים שלי", "לסיים לעת עתה"]);
+      setCurrentOptions(["לראות סיכום הדיווחים שלי", "לדווח על משהו נוסף", "לסיים לעת עתה"]);
       setShowChips(true);
       setAllowMultipleSelection(false);
       setIsContinuationPrompt(true);
@@ -772,14 +779,10 @@ const ChatInterface = () => {
         await showMessageWithTyping(`את לא לבד ${displayNickname} 💗`, 1500, false, "חושבת");
       }
       
-      // Show closing message and music player
+      // After showing reports history, ask if they want to submit another report
       setTimeout(() => {
-        setMessages(prev => [...prev, { 
-          text: "זה בסדר גמור. אני כאן מתי שתרצי לחזור 💙", 
-          isUser: false 
-        }]);
-        setShowMusicPlayer(true);
-      }, 500);
+        showNewReportPrompt();
+      }, 1500);
       
     } catch (error) {
       console.error('Error fetching reports:', error);
@@ -791,15 +794,82 @@ const ChatInterface = () => {
         }];
       });
       
-      // Show closing message anyway
+      // After error, ask if they want to submit another report
+      setTimeout(() => {
+        showNewReportPrompt();
+      }, 1500);
+    }
+  };
+
+  // Show prompt asking if user wants to submit another report
+  const showNewReportPrompt = () => {
+    setTimeout(() => {
+      setMessages(prev => [...prev, { 
+        text: "רוצה לדווח על משהו נוסף שקרה? או שאת מעדיפה לסיים לעת עתה?", 
+        isUser: false 
+      }]);
+      
+      setCurrentOptions(["כן, לדווח על משהו נוסף", "לסיים לעת עתה"]);
+      setShowChips(true);
+      setAllowMultipleSelection(false);
+      setIsNewReportPrompt(true);
+    }, 1000);
+  };
+
+  // Handle new report prompt choice
+  const handleNewReportChoice = (choice) => {
+    const userMessage = { text: choice, isUser: true };
+    setMessages(prev => [...prev, userMessage]);
+    setShowChips(false);
+    setIsNewReportPrompt(false);
+    
+    if (choice === "לסיים לעת עתה") {
+      // User wants to close chat - show closing message and music player
       setTimeout(() => {
         setMessages(prev => [...prev, { 
           text: "זה בסדר גמור. אני כאן מתי שתרצי לחזור 💙", 
           isUser: false 
         }]);
+        // Show music player based on the feeling they selected
         setShowMusicPlayer(true);
-      }, 1000);
+      }, 500);
+    } else if (choice === "כן, לדווח על משהו נוסף") {
+      // User wants to make another report - restart from messageText question
+      setTimeout(() => {
+        startNewReport();
+      }, 500);
     }
+  };
+
+  // Start a new report flow (skip opening, nickname, feeling, email - restart from messageText)
+  const startNewReport = () => {
+    // Reset only the report-specific data, keep userIdentifier (nickname) and feeling
+    setUserData(prev => ({
+      userIdentifier: prev.userIdentifier, // Keep the nickname
+      feeling: prev.feeling, // Keep the feeling for music player
+      // Clear report-specific fields
+      messageText: undefined,
+      channel: undefined,
+      senderType: undefined,
+      extraContext: undefined,
+      trustedAdultEmail: undefined
+    }));
+    
+    // Start from messageText question (index 4 in questions array)
+    setCurrentQuestionIndex(4);
+    
+    // Show messageText question
+    setTimeout(() => {
+      const messageQuestion = questions[4];
+      setMessages(prev => [...prev, { 
+        text: messageQuestion.text, 
+        isUser: false 
+      }]);
+      
+      // Show text input for messageText
+      setShowChips(false);
+      setAllowMultipleSelection(false);
+    }, 500);
   };
 
   // Handle continuation choice
@@ -810,19 +880,19 @@ const ChatInterface = () => {
     setIsContinuationPrompt(false);
     
     if (choice === "לסיים לעת עתה") {
-      // User wants to close chat - show music player for relaxation support
+      // User wants to close chat - ask if they want to submit another report
       setTimeout(() => {
-        setMessages(prev => [...prev, { 
-          text: "זה בסדר גמור. אני כאן מתי שתרצי לחזור 💙", 
-          isUser: false 
-        }]);
-        // Show music player based on the feeling they selected at the beginning
-        setShowMusicPlayer(true);
+        showNewReportPrompt();
       }, 500);
     } else if (choice === "לראות סיכום הדיווחים שלי") {
       // User wants to see reports history
       setTimeout(() => {
         showReportsHistory();
+      }, 500);
+    } else if (choice === "לדווח על משהו נוסף") {
+      // User wants to report another thing - start new report flow
+      setTimeout(() => {
+        startNewReport();
       }, 500);
     }
   };
@@ -841,7 +911,7 @@ const ChatInterface = () => {
 
   // Determine what to show: text input or chips
   const currentQuestion = questions[currentQuestionIndex];
-      const showTextInput = !isToneSelection && !isContinuationPrompt && ((currentQuestion && currentQuestion.type === "text" && !analyzeLoading) || isWaitingForEmailInput);
+      const showTextInput = !isToneSelection && !isContinuationPrompt && !isNewReportPrompt && ((currentQuestion && currentQuestion.type === "text" && !analyzeLoading) || isWaitingForEmailInput);
 
   return (
     <div className={styles.chatContainer}>
