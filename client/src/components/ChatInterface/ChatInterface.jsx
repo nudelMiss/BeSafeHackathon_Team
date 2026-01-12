@@ -690,7 +690,7 @@ const ChatInterface = () => {
         }]);
         
         // Display each report in human tone
-        for (let i = 0; i < Math.min(reports.length, 5); i++) { // Show max 5 reports
+        for (let i = 0; i < Math.min(reports.length, 3); i++) { // Show max 3 reports
           const report = reports[i];
           const date = new Date(report.createdAt);
           const dateStr = date.toLocaleDateString('he-IL', { 
@@ -718,8 +718,8 @@ const ChatInterface = () => {
           await showMessageWithTyping(summary, 1200, false, "מקלידה");
         }
         
-        if (reports.length > 5) {
-          await showMessageWithTyping(`ועוד ${reports.length - 5} דיווח${reports.length - 5 > 1 ? 'ים' : ''} נוספים.`, 1000, false, "מקלידה");
+        if (reports.length > 3) {
+          await showMessageWithTyping(`ועוד ${reports.length - 3} דיווח${reports.length - 3 > 1 ? 'ים' : ''} נוספים.`, 1000, false, "מקלידה");
         }
         
         // Support line at the end with nickname - add delay before showing
