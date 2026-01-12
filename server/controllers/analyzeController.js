@@ -5,8 +5,8 @@ import {
   getReportsByUser,
   getOrCreateUserByNickname,
 } from "../services/reportStore.js";
-import {buildResponsibleAdultEmail} from "../utils/buildResponsibleAdultEmail.js";
-import {sendResponsibleAdultEmail} from "../services/ResponsibleAdultEmailService.js";
+import { buildResponsibleAdultEmail } from "../utils/buildResponsibleAdultEmail.js";
+import { sendResponsibleAdultEmail } from "../services/ResponsibleAdultEmailService.js";
 import { buildProfessionalHelp } from "../utils/professionalHelp.js";
 
 export const analyzeMessage = async (req, res) => {
@@ -89,8 +89,16 @@ export const analyzeMessage = async (req, res) => {
     "assertive": string,
     "noReply": string
   },
-  "supportLine": string
+  "supportLine": string,
+  "professionalHelp": {
+    "show": boolean,
+    "urgency": "none" | "suggest" | "urgent",
+    "reasons": string,
+    "recommendedResources": ("eran" | "police100" | "moked105")[],
+    "message": string
+  }
 }
+
 
 כללים:
 - חשוב: יש להשתמש גם ב-context (פרטי/קבוצה, זר/מוכר, feelings) כדי לקבוע riskLevel,
@@ -121,6 +129,38 @@ export const analyzeMessage = async (req, res) => {
 - category = "אחר"
 - explanation = "לא זוהתה סכנה מיידית, אך מומלץ לשמור על גבולות ופרטיות."
 - עדיין למלא replyOptions ו-supportLine.
+
+כללים ל־professionalHelp:
+
+- professionalHelp.show = true רק אם:
+  - riskLevel = "גבוה"
+  - או riskLevel = "בינוני" ויש אינדיקציה למצוקה (למשל: פחד, חרדה, סכנה, לחץ, חוסר אונים).
+
+- אם אין צורך בקווי תמיכה:
+  - professionalHelp.show = false
+  - urgency = "none"
+  - recommendedResources = []
+
+- urgency:
+  - "urgent" אם יש סכנה מיידית או איום.
+  - "suggest" אם יש מצוקה אך לא חירום.
+  - "none" אם אין צורך.
+
+- recommendedResources:
+  - ער״ן → מצוקה רגשית, פחד, חרדה.
+  - מוקד 105 → פגיעה ברשת, גרומינג, קטינים, מיניות.
+  - משטרה 100 → איום מיידי, סחיטה, סכנה פיזית.
+
+- בחרי לכל היותר 1–2 קווים. לעולם לא את כולם.
+
+- message:
+  ניסוח בגוף ראשון, בסגנון שיחתי ולא רשמי.
+  חשוב: בלי מקפים בכלל (לא "-", לא "–", לא "—") ובלי תבליטים.
+  כתבי משפט/שני משפטים רציפים.
+
+  דוגמה תקינה:
+  "אם זה מרגיש לך כבד עכשיו הייתי מתחילה בשיחה אנונימית עם ער״ן (1201). אם יש סכנה מיידית אפשר גם לפנות למשטרה (100)."
+
 
 ${toneInstruction}
 `.trim();
@@ -159,24 +199,73 @@ userHistorySummary:
       });
     }
 
-    const professionalHelp = buildProfessionalHelp(parsed, contextWithFeelings);
+    // =========================
+    // Professional Help gating
+    // =========================
+    const professionalHelpCandidate = buildProfessionalHelp(parsed, contextWithFeelings);
+
+    const feelingsArr = Array.isArray(contextWithFeelings?.feelings)
+      ? contextWithFeelings.feelings
+      : [];
+
+    const urgentFeelings = ["פחד", "חרדה", "סכנה"];
+    const hasUrgentFeelings = feelingsArr.some((f) => urgentFeelings.includes(f));
+
+    const risk = parsed?.riskLevel; // "נמוך" | "בינוני" | "גבוה"
+    const isHigh = risk === "גבוה";
+    const isMedium = risk === "בינוני";
+
+    const cat = (parsed?.category || "").replace(/\s+/g, "");
+
+    const highRelevanceCats = ["גרומינג", "לחץמיני", "הטרדה", "איום", "סחיטה"];
+
+    const textSignals = `${messageText || ""} ${parsed?.explanation || ""} ${parsed?.supportLine || ""} ${parsed?.replyOptions?.noReply || ""}`;
+
+    const hasEscalationSignal =
+      /איום|סחיטה|מסוכן|חירום|משטרה|לדווח|חסימה|לחסום|סוד|פרטי|להיפגש|תמונה|עירום|גיל|כתובת|מיקום|כסף/i.test(
+        textSignals
+      );
+
+    const shouldIncludeProfessionalHelp =
+      isHigh ||
+      hasUrgentFeelings ||
+      (isMedium &&
+        (highRelevanceCats.some((k) => cat.includes(k)) || hasEscalationSignal));
+
+    const candidateOk =
+      professionalHelpCandidate &&
+      (professionalHelpCandidate.message ||
+        (Array.isArray(professionalHelpCandidate.resources) &&
+          professionalHelpCandidate.resources.length > 0));
+
+    const professionalHelp =
+      shouldIncludeProfessionalHelp && candidateOk
+        ? professionalHelpCandidate
+        : undefined;
 
 
-      let emailReport = null;
-      // Backend returns Hebrew riskLevel: "גבוה" | "בינוני" | "נמוך"
-      const shouldReport = ResponsibleAdultEmail && parsed.riskLevel === "גבוה";
+    // =========================
+    // Responsible adult email
+    // =========================
+    let emailReport = null;
+    // Backend returns Hebrew riskLevel: "גבוה" | "בינוני" | "נמוך"
+    const shouldReport = ResponsibleAdultEmail && parsed.riskLevel === "גבוה";
 
-      if (shouldReport) {
-          try {
-              const emailContent = buildResponsibleAdultEmail(parsed, user.nickname || "המשתמשת");
-              await sendResponsibleAdultEmail(ResponsibleAdultEmail, emailContent.subject, emailContent.body)
-              emailReport = {sent : true} ;
-          } catch (error) {
-              console.error("Failed to send responsible adult email: " , error);
-              emailReport = { sent: false, error: error.message };
-          }
+    if (shouldReport) {
+      try {
+        const emailContent = buildResponsibleAdultEmail(parsed, user.nickname || "המשתמשת");
+        await sendResponsibleAdultEmail(
+          ResponsibleAdultEmail,
+          emailContent.subject,
+          emailContent.body
+        );
+        emailReport = { sent: true };
+      } catch (error) {
+        console.error("Failed to send responsible adult email: ", error);
+        emailReport = { sent: false, error: error.message };
       }
-    
+    }
+
     const report = {
       id: crypto.randomUUID(),
       userId: user.id,
@@ -193,18 +282,15 @@ userHistorySummary:
       console.error("Failed to save report:", e);
     }
 
-
-
     return res.status(200).json({
       ...parsed,
-      professionalHelp,
+      ...(professionalHelp ? { professionalHelp } : {}),
       userId: user.id,
       nickname: user.nickname,
       reportId: report.id,
       createdAt: report.createdAt,
       emailReport,
     });
-
   } catch (error) {
     console.error("Analyze error:", error);
     return res.status(500).json({
