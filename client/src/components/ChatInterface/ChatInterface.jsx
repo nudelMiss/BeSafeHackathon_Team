@@ -391,22 +391,8 @@ const ChatInterface = () => {
       
       // Show next question after a short delay (feels more natural)
       setTimeout(() => {
-        // Special handling for feeling question - use nickname
-        // Check if the last question was userIdentifier, if so use lastQuestionValue
-        // Otherwise, get from current userData state
+        // Use the question text as-is (no special personalization needed)
         let questionText = nextQuestion.text;
-        if (nextQuestion.key === 'feeling') {
-          const nickname = (lastQuestionKey === 'userIdentifier' && lastQuestionValue) 
-            ? lastQuestionValue 
-            : userData.userIdentifier;
-          
-          if (nickname) {
-            questionText = `היי ${nickname}, מה שלומך? איך את מרגישה עכשיו? (אפשר לבחור כמה רגשות)`;
-          } else {
-            // Fallback if nickname not available yet
-            questionText = "היי, מה שלומך? איך את מרגישה עכשיו? (אפשר לבחור כמה רגשות)";
-          }
-        }
         
         setMessages(prev => [...prev, { text: questionText, isUser: false }]);
         
@@ -843,7 +829,7 @@ const ChatInterface = () => {
 
   // Determine what to show: text input or chips
   const currentQuestion = questions[currentQuestionIndex];
-      const showTextInput = !showFollowUp && !isToneSelection && !isContinuationPrompt && ((currentQuestion && currentQuestion.type === "text" && !analyzeLoading) || isWaitingForEmailInput);
+      const showTextInput = !isToneSelection && !isContinuationPrompt && ((currentQuestion && currentQuestion.type === "text" && !analyzeLoading) || isWaitingForEmailInput);
 
   return (
     <div className={styles.chatContainer}>
