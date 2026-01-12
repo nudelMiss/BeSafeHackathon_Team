@@ -881,9 +881,14 @@ const ChatInterface = () => {
     setIsContinuationPrompt(false);
     
     if (choice === "לסיים לעת עתה") {
-      // User wants to close chat - ask if they want to submit another report
+      // User wants to close chat - show closing message and music player directly
       setTimeout(() => {
-        showNewReportPrompt();
+        setMessages(prev => [...prev, { 
+          text: "זה בסדר גמור. אני כאן מתי שתרצי לחזור 💙", 
+          isUser: false 
+        }]);
+        // Show music player based on the feeling they selected
+        setShowMusicPlayer(true);
       }, 500);
     } else if (choice === "לראות סיכום הדיווחים שלי") {
       // User wants to see reports history
