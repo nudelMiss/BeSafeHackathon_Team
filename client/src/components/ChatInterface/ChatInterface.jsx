@@ -68,45 +68,45 @@ const ChatInterface = () => {
   // Define all questions we want to ask - MATCHED TO BACKEND REQUIREMENTS
   const questions = [
     {
-      text: "שלום, אני האחות הדיגיטלית שלך ברשת. אני כאן כדי לעזור לך להתמודד עם אירועים לא נעימים שחווית ברשת. אני שמחה שהחלטת לפנות אליי, בואי ננסה להבין מה קרה.",
+      text: "היי… אני האחות הדיגיטלית שלך כאן ברשת, אני כאן כדי להקשיב לך ולעזור לך להתמודד עם משהו שלא היה לך נעים. שמחה שפנית אליי💗",
       type: "chips",
       key: "openingAck",
       multiple: false,
-      options: ["אוקי, בואי נתחיל"]
+      options: ["בואי נתחיל"]
     },
     {
-      text: "איך היית רוצה שאני אקרא לך? את יכולה לתת את השם שלך או כל כינוי שתבחרי.",
+      text: "איך היית רוצה שאקרא לך? את יכולה לתת את השם שלך או כל כינוי שנוח לך",
       type: "text",
       key: "userIdentifier"
     },
     {
-      text: "שלום! אני כאן כדי לעזור לך. בואי נתחיל - איך את מרגישה עכשיו? (אפשר לבחור כמה רגשות)",
+      text: "איך את מרגישה עכשיו? את יכולה לבחור כמה רגשות שמתאימים למה שעובר עלייך",
       type: "chips",
       key: "feeling",
       multiple: true,
       options: ["מבולבלת", "מבוכה", "סכנה", "פחד", "עצב", "כעס", "חרדה", "רגועה", "תקווה", "אחר"]
     },
     {
-      text: "אם יש דבר שמעורר דאגה, אנחנו אולי נרצה ליצור קשר עם מבוגר אחראי שנוכל לסמוך עליו.",
+      text: "לפעמים עוזר לערב מבוגר אחראי שאפשר לסמוך עליו. את רוצה לשתף מייל של מישהו כזה?",
       type: "chips",
       key: "trustedAdultEmail",
       multiple: false,
-      options: ["אזין מייל של מבוגר אחראי", "מעדיפה לא לתת מייל"]
+      options: ["אכניס מייל של מבוגר אחראי", "מעדיפה לא לשתף כרגע"]
     },
     {
-      text: "כתבי כאן את ההודעה שקיבלת שאת רוצה שאני אנתח",
+      text: "כתבי כאן את ההודעה שקיבלת, ואני כאן איתך בזה 😊",
       type: "text",
       key: "messageText"
     },
     {
-      text: "באיזה ערוץ זה קרה?",
+      text: "איפה זה קרה?",
       type: "chips",
       key: "channel",
       multiple: false,
       options: ["רשתות חברתיות", "קבוצה", "פרטי"]
     },
     {
-      text: "מי שלח זאת - מישהו שאת מכירה או זר?",
+      text: "מי שלח לך את ההודעה?",
       type: "chips",
       key: "senderType",
       multiple: false,
@@ -173,7 +173,7 @@ const ChatInterface = () => {
   // Handle follow-up question from user
   const handleFollowUpQuestion = async (followUpText) => {
     // Show loading message
-    setMessages(prev => [...prev, { text: "אני מעבדת את השאלה שלך...", isUser: false, isTyping: true }]);
+    setMessages(prev => [...prev, { text: "אני מעבדת את ההודעה שלך...", isUser: false, isTyping: true }]);
     
     try {
       // Map channel values to Hebrew (same as in submitData)
@@ -218,7 +218,7 @@ const ChatInterface = () => {
       setMessages(prev => {
         const filtered = prev.filter(msg => !msg.isTyping);
         return [...filtered, { 
-          text: "סליחה, הייתה שגיאה בשליחת השאלה. נסי שוב.", 
+          text: "סליחה, הייתה שגיאה בשליחת הבקשה. נסי שוב.",
           isUser: false 
         }];
       });
@@ -267,7 +267,7 @@ const ChatInterface = () => {
         // If user chose not to reply, show acknowledgment and proceed
         setTimeout(() => {
           setMessages(prev => [...prev, { 
-            text: "הבנתי, זה בסדר גמור לא להגיב.", 
+            text: "הבנתי 💗 זה לגמרי בסדר לבחור לא להגיב",
             isUser: false 
           }]);
           setTimeout(() => {
@@ -291,7 +291,7 @@ const ChatInterface = () => {
       const displayText = Array.isArray(value) ? value.join(', ') : value;
       setMessages(prev => [...prev, { text: displayText, isUser: true }]);
       
-      if (value === "מעדיפה לא לתת מייל") {
+      if (value === "מעדיפה לא לשתף כרגע") {
         // User chose not to provide email
         setUserData(prev => ({ ...prev, trustedAdultEmail: "" }));
         setShowChips(false);
@@ -301,7 +301,7 @@ const ChatInterface = () => {
         setShowChips(false);
         setIsWaitingForEmailInput(true);
         setTimeout(() => {
-          setMessages(prev => [...prev, { text: "אוקיי, הזיני את המייל:", isUser: false }]);
+          setMessages(prev => [...prev, { text: "תכנסי את המייל:", isUser: false }]);
         }, 500);
       }
       return;
@@ -350,7 +350,7 @@ const ChatInterface = () => {
     if (!options) return;
 
     // Prompt for tone choice
-    setMessages(prev => [...prev, { text: "חשבתי על כמה תגובות שתוכלי לשלוח. באיזה סגנון תרצי להשתמש?", isUser: false }]);
+    setMessages(prev => [...prev, { text: "חשבתי על כמה תגובות שתוכלי לשלוח, באיזה סגנון תרצי להשתמש?", isUser: false }]);
 
     setCurrentOptions(["תגובה עדינה", "תגובה נחרצת", "לא להגיב"]);
     setShowChips(true);
