@@ -10,10 +10,15 @@
   display: flex;
   align-items: center;
   gap: 20px;
+  height: 110px;
+  overflow: hidden;
 }
 
 .appLogo {
-  height: 100px;
+  height: 200px;
+  margin-right: -30px;
+  margin-top: 7px;
+  margin-left: -30px;
 }
 
 .appTitle {
