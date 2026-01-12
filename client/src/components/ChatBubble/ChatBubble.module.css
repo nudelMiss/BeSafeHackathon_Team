@@ -5,6 +5,7 @@
   margin-bottom: 12px;
   word-wrap: break-word;
   animation: fadeIn 0.3s ease-in;
+  direction: rtl;
 }
 
 @keyframes fadeIn {
@@ -42,6 +43,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  animation: gentleFlicker 2s ease-in-out infinite;
 }
 
 .typingIndicator {
@@ -51,10 +53,19 @@
 
 @keyframes typing {
   0%, 60%, 100% {
-    opacity: 0.3;
+    opacity: 0.4;
   }
   30% {
     opacity: 1;
+  }
+}
+
+@keyframes gentleFlicker {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.85;
   }
 }
 

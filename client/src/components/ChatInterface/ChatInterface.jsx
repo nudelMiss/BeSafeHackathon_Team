@@ -3,6 +3,7 @@ import ChatBubble from '../ChatBubble/ChatBubble';
 import ChipSelector from '../ChipSelector/ChipSelector';
 import MusicPlayer from '../MusicPlayer/MusicPlayer';
 import { AnalyzeContext } from '../../context/AnalyzeContext';
+import api from '../../services/api';
 import styles from './ChatInterface.module.css';
 
 const ChatInterface = () => {
@@ -32,7 +33,6 @@ const ChatInterface = () => {
   const [isParentConsentPrompt, setIsParentConsentPrompt] = useState(false);
   const [isToneSelection, setIsToneSelection] = useState(false);
   const [isContinuationPrompt, setIsContinuationPrompt] = useState(false);
-  const [isFollowUpHelp, setIsFollowUpHelp] = useState(false);
   const [showMusicPlayer, setShowMusicPlayer] = useState(false);
   const [replyOptionsData, setReplyOptionsData] = useState(null);
   const [isWaitingForEmailInput, setIsWaitingForEmailInput] = useState(false);
@@ -44,6 +44,30 @@ const ChatInterface = () => {
   
   // Reference to scroll to bottom of chat
   const messagesEndRef = useRef(null);
+
+  // Helper function to show typing indicator, then message (used in multiple places)
+  const showMessageWithTyping = async (messageText, delay = 1000, isEmailBadge = false, typingVerb = "חושבת") => {
+    // Show typing indicator with verb
+    setMessages(prev => [...prev, { 
+      text: "", 
+      isUser: false,
+      isTyping: true,
+      typingText: typingVerb
+    }]);
+    
+    // Wait for typing animation
+    await new Promise(resolve => setTimeout(resolve, delay));
+    
+    // Remove typing indicator and show actual message
+    setMessages(prev => {
+      const filtered = prev.filter(msg => !msg.isTyping);
+      return [...filtered, { 
+        text: messageText, 
+        isUser: false,
+        isEmailBadge: isEmailBadge 
+      }];
+    });
+  };
 
   // Display response text in chunks (simulates live typing)
   // const displayResponseInChunks = async (fullText) => {
@@ -68,7 +92,7 @@ const ChatInterface = () => {
   // Define all questions we want to ask - MATCHED TO BACKEND REQUIREMENTS
   const questions = [
     {
-      text: "היי… אני האחות הדיגיטלית שלך כאן ברשת, אני כאן כדי להקשיב לך ולעזור לך להתמודד עם משהו שלא היה לך נעים. שמחה שפנית אליי💗",
+      text: "היי… אני האחות הדיגיטלית שלך כאן ברשת, אני כאן כדי להקשיב לך ולעזור לך להתמודד עם משהו שלא היה לך נעים. שמחה שפנית אליי 💗",
       type: "chips",
       key: "openingAck",
       multiple: false,
@@ -147,13 +171,6 @@ const ChatInterface = () => {
       setUserData(prev => ({ ...prev, trustedAdultEmail: text.trim() }));
       setIsWaitingForEmailInput(false);
       moveToNextQuestion('trustedAdultEmail', text.trim());
-      return;
-    }
-    
-    // If this is a follow-up help question, send it to backend
-    if (isFollowUpHelp) {
-      setIsFollowUpHelp(false);
-      handleFollowUpQuestion(text.trim());
       return;
     }
     
@@ -242,6 +259,7 @@ const ChatInterface = () => {
       };
       const selectedKey = toneKeyByLabel[value];
       const replyText = replyOptionsData?.[selectedKey];
+      const riskLevel = analyzeResponse?.riskLevel;
 
       // Show user's choice
       setMessages(prev => [...prev, { text: value, isUser: true }]);
@@ -253,26 +271,42 @@ const ChatInterface = () => {
       
       // Show suggested reply from server with a delay
       if (replyText && selectedKey !== "noReply") {
-        setTimeout(() => {
-          setMessages(prev => [...prev, { 
-            text: replyText, 
-            isUser: false 
-          }]);
-          // After showing the reply, show continuation prompt
+        setTimeout(async () => {
+          // Show pre-sentence
+          await showMessageWithTyping("את יכולה להגיב ב", 1200, false, "מקלידה");
+          
+          // Show the reply text
+          await showMessageWithTyping(replyText, 1500, false, "מקלידה");
+          
+          // Show explanation for why this tone fits the situation
+          let explanationText = "";
+          if (selectedKey === "gentle") {
+            explanationText = riskLevel === "גבוה" 
+              ? "תגובה עדינה יכולה לעזור לך להציב גבול בלי להסלים את המצב, במיוחד כשמדובר ברמת סיכון גבוהה."
+              : "תגובה עדינה מאפשרת לך להציב גבול בצורה מכבדת, בלי ליצור עימות מיותר.";
+          } else if (selectedKey === "assertive") {
+            explanationText = riskLevel === "גבוה"
+              ? "תגובה נחרצת חשובה כשמדובר ברמת סיכון גבוהה - היא מבהירה שהתנהגות כזו לא מקובלת עלייך."
+              : "תגובה נחרצת עוזרת לך להבהיר את הגבולות שלך בצורה ברורה וחד-משמעית.";
+          }
+          
+          if (explanationText) {
+            await showMessageWithTyping(explanationText, 1500, false, "חושבת");
+          }
+          
+          // After showing everything, show continuation prompt
           setTimeout(() => {
             showContinuationPrompt();
-          }, 1000);
+          }, 800);
         }, 500);
       } else if (selectedKey === "noReply") {
-        // If user chose not to reply, show acknowledgment and proceed
-        setTimeout(() => {
-          setMessages(prev => [...prev, { 
-            text: "הבנתי 💗 זה לגמרי בסדר לבחור לא להגיב",
-            isUser: false 
-          }]);
+        // If user chose not to reply, show acknowledgment and explanation
+        setTimeout(async () => {
+          await showMessageWithTyping("הבנתי 💗 זה לגמרי בסדר לבחור לא להגיב", 1200, false, "מקלידה");
+          await showMessageWithTyping("לפעמים הדבר הכי טוב שאפשר לעשות זה פשוט לא להגיב, לחסום ולדווח. זה לא אומר שאת לא חזקה - זה אומר שאת יודעת להגן על עצמך.", 1500, false, "חושבת");
           setTimeout(() => {
             showContinuationPrompt();
-          }, 1000);
+          }, 800);
         }, 500);
       } else {
         // If no reply text available, show continuation prompt directly
@@ -301,7 +335,7 @@ const ChatInterface = () => {
         setShowChips(false);
         setIsWaitingForEmailInput(true);
         setTimeout(() => {
-          setMessages(prev => [...prev, { text: "תכנסי את המייל:", isUser: false }]);
+          setMessages(prev => [...prev, { text: "מעולה, איזה מייל תרצי שאני אשלח אליו?", isUser: false }]);
         }, 500);
       }
       return;
@@ -329,19 +363,18 @@ const ChatInterface = () => {
     // Save the selected value in userData
     setUserData(prev => ({ ...prev, [currentQuestion.key]: value }));
 
-    // Show user's selection as a message
-    // For multiple selection, show array as comma-separated
-    const displayText = Array.isArray(value) ? value.join(', ') : value;
-    const userMessage = { text: displayText, isUser: true };
-    setMessages(prev => [...prev, userMessage]);
-    
-    // For single selection, hide chips and move to next question
-    // For multiple selection, keep chips visible until user is done
+    // For single selection, show message immediately and move to next question
+    // For multiple selection, don't show message yet - wait for "done" button
     if (!currentQuestion.multiple) {
+      // Show user's selection as a message
+      const displayText = Array.isArray(value) ? value.join(', ') : value;
+      const userMessage = { text: displayText, isUser: true };
+      setMessages(prev => [...prev, userMessage]);
+      
       setShowChips(false);
       moveToNextQuestion();
     }
-    // If multiple selection, chips stay visible - user can add more or we wait for "done" button
+    // If multiple selection, chips stay visible - user can add more selections
   };
 
   // Start tone selection stage
@@ -360,6 +393,16 @@ const ChatInterface = () => {
 
   // Handle when user is done with multiple selection
   const handleMultipleSelectionDone = () => {
+    // Get the current question and all selected values
+    const currentQuestion = questions[currentQuestionIndex];
+    const selectedValues = userData[currentQuestion.key];
+    
+    // Add single combined message with all selections
+    if (selectedValues && Array.isArray(selectedValues) && selectedValues.length > 0) {
+      const displayText = selectedValues.join(', ');
+      setMessages(prev => [...prev, { text: displayText, isUser: true }]);
+    }
+    
     setShowChips(false);
     moveToNextQuestion();
   };
@@ -375,7 +418,24 @@ const ChatInterface = () => {
       
       // Show next question after a short delay (feels more natural)
       setTimeout(() => {
-        setMessages(prev => [...prev, { text: nextQuestion.text, isUser: false }]);
+        // Special handling for feeling question - use nickname
+        // Check if the last question was userIdentifier, if so use lastQuestionValue
+        // Otherwise, get from current userData state
+        let questionText = nextQuestion.text;
+        if (nextQuestion.key === 'feeling') {
+          const nickname = (lastQuestionKey === 'userIdentifier' && lastQuestionValue) 
+            ? lastQuestionValue 
+            : userData.userIdentifier;
+          
+          if (nickname) {
+            questionText = `היי ${nickname}, מה שלומך? איך את מרגישה עכשיו? (אפשר לבחור כמה רגשות)`;
+          } else {
+            // Fallback if nickname not available yet
+            questionText = "היי, מה שלומך? איך את מרגישה עכשיו? (אפשר לבחור כמה רגשות)";
+          }
+        }
+        
+        setMessages(prev => [...prev, { text: questionText, isUser: false }]);
         
         // If next question uses chips, show them
         if (nextQuestion.type === "chips") {
@@ -401,8 +461,8 @@ const ChatInterface = () => {
   const submitData = async (lastQuestionKey = null, lastQuestionValue = null) => {
     setShowChips(false);
     
-    // Show loading message
-    setMessages(prev => [...prev, { text: "אני מעבדת את המידע שלך...", isUser: false, isTyping: true }]);
+    // Show loading message with typing indicator
+    setMessages(prev => [...prev, { text: "מנתחת את ההודעה שלך...", isUser: false, isTyping: true, typingText: "מנתחת" }]);
 
     // ============================================
     // SEND DATA TO BACKEND AS JSON
@@ -531,69 +591,53 @@ const ChatInterface = () => {
       setSeverity(severity);
       severityRef.current = severity;
       
-      // Helper function to show typing indicator, then message
-      const showMessageWithTyping = async (messageText, delay = 1000, isEmailBadge = false) => {
-        // Show typing indicator
-        setMessages(prev => [...prev, { 
-          text: "", 
-          isUser: false,
-          isTyping: true 
-        }]);
-        
-        // Wait for typing animation
-        await new Promise(resolve => setTimeout(resolve, delay));
-        
-        // Remove typing indicator and show actual message
-        setMessages(prev => {
-          const filtered = prev.filter(msg => !msg.isTyping);
-          return [...filtered, { 
-            text: messageText, 
-            isUser: false,
-            isEmailBadge: isEmailBadge 
-          }];
-        });
-      };
-      
       // Async function to display all messages with typing indicators
       const displayResponseMessages = async () => {
-        // Display risk level and category together in one message with typing indicator
+        const nickname = userData.userIdentifier || "יקרה";
+        
+        // 1. Display support line FIRST with pink heart emoji and nickname
+        if (supportLine) {
+          // Format: "אני כאן בשבילך [nickname]"
+          const personalizedSupportLine = `אני כאן בשבילך ${nickname}`;
+          await showMessageWithTyping(`${personalizedSupportLine} 💗`, 1500, false, "מקלידה");
+        }
+        
+        // 2. Display explanation SECOND with natural typing
+        if (explanation) {
+          await showMessageWithTyping(explanation, 1800, false, "מקלידה");
+        }
+        
+        // 3. Display risk level and category THIRD in humane tone
         if (riskLevel || analyzeResponse.category) {
+          let combinedText = "זיהיתי ";
           const parts = [];
           if (riskLevel) {
-            parts.push(`רמת הסיכון שמצאנו: ${riskLevel}`);
+            const riskText = riskLevel === "גבוה" ? "רמת סיכון גבוהה" : riskLevel === "בינוני" ? "רמת סיכון בינונית" : "רמת סיכון נמוכה";
+            parts.push(riskText);
           }
           if (analyzeResponse.category) {
-            parts.push(`הקטגוריה שמצאנו: ${analyzeResponse.category}`);
+            parts.push(`זה נראה כמו ${analyzeResponse.category}`);
           }
-          const combinedText = parts.join('\n');
-          await showMessageWithTyping(combinedText, 1000);
+          combinedText += parts.join(" ו");
+          combinedText += ".";
+          await showMessageWithTyping(combinedText, 1500, false, "חושבת");
         }
         
-        // Display explanation with typing indicator (1 second delay between bubbles)
-        if (explanation) {
-          await showMessageWithTyping(explanation, 1000);
-        }
-        
-        // Display support line with typing indicator (1 second delay between bubbles)
-        if (supportLine) {
-          await showMessageWithTyping(supportLine, 1000);
-        }
-        
-        // Display email result (sent or failed) with typing indicator (1 second delay between bubbles)
+        // Display email result (sent or failed) with typing indicator
         if (emailReport) {
           if (emailReport.sent === true) {
             // Email sent successfully
-            await showMessageWithTyping("✅ נשלח מייל למבוגר אחראי", 1000, true);
+            await showMessageWithTyping("✅ נשלח מייל למבוגר אחראי", 1200, true, "מקלידה");
           } else if (emailReport.error) {
             // Email failed to send - show message and continue flow
-            await showMessageWithTyping("לא הצלחתי לשלוח את המייל כרגע, אבל נמשיך הלאה. את יכולה לנסות שוב מאוחר יותר.", 1000);
+            await showMessageWithTyping("לא הצלחתי לשלוח את המייל כרגע, אבל נמשיך הלאה. את יכולה לנסות שוב מאוחר יותר.", 1500, false, "מקלידה");
           }
         }
         
         // Proceed to tone selection (reply options)
         setTimeout(() => {
           startToneSelection(replyOptions);
-        }, 500);
+        }, 800);
       };
       
       // Call the async function
@@ -629,16 +673,152 @@ const ChatInterface = () => {
 
   // Show continuation prompt after user selects reply option
   const showContinuationPrompt = () => {
-    setMessages(prev => [...prev, { 
-      text: "מה תרצי שנעשה מכאן?", 
-      isUser: false 
-    }]);
+    // Show email status summary before continuation prompt if email was requested
+    // Get emailReportStatus from analyzeResponse if available
+    const currentEmailReport = analyzeResponse?.emailReport;
     
-    // Set continuation options
-    setCurrentOptions(["לעשות משהו נוסף", "לסיים לעת עתה"]);
-    setShowChips(true);
-    setAllowMultipleSelection(false);
-    setIsContinuationPrompt(true);
+    if (userData.trustedAdultEmail && userData.trustedAdultEmail.trim() !== "") {
+      // User provided an email, show status
+      if (currentEmailReport) {
+        if (currentEmailReport.sent === true) {
+          setMessages(prev => [...prev, { 
+            text: "📧 סיכום: נשלח מייל למבוגר אחראי עם פרטי הדיווח", 
+            isUser: false,
+            isEmailBadge: true
+          }]);
+        } else if (currentEmailReport.error) {
+          setMessages(prev => [...prev, { 
+            text: "📧 סיכום: לא הצלחתי לשלוח את המייל למבוגר אחראי. את יכולה לנסות שוב מאוחר יותר.", 
+            isUser: false 
+          }]);
+        } else {
+          // Email was not sent (e.g., risk level was not high enough)
+          setMessages(prev => [...prev, { 
+            text: "📧 סיכום: המייל לא נשלח כי רמת הסיכון לא הייתה גבוהה מספיק. אם את מרגישה שצריך עזרה, את יכולה לפנות שוב.", 
+            isUser: false 
+          }]);
+        }
+      } else {
+        // Email report status not available (shouldn't happen, but handle gracefully)
+        setMessages(prev => [...prev, { 
+          text: "📧 סיכום: המייל לא נשלח. אם את מרגישה שצריך עזרה, את יכולה לפנות שוב.", 
+          isUser: false 
+        }]);
+      }
+    }
+    
+    // Small delay before showing continuation prompt
+    setTimeout(() => {
+      setMessages(prev => [...prev, { 
+        text: "מה תרצי שנעשה מכאן?", 
+        isUser: false 
+      }]);
+      
+      // Set continuation options
+      setCurrentOptions(["לראות סיכום הדיווחים שלי", "לסיים לעת עתה"]);
+      setShowChips(true);
+      setAllowMultipleSelection(false);
+      setIsContinuationPrompt(true);
+    }, 1000);
+  };
+
+  // Fetch and display user's report history
+  const showReportsHistory = async () => {
+    try {
+      const userNickname = userData.userIdentifier || "anonymous";
+      const displayNickname = userData.userIdentifier || "יקרה";
+      
+      setMessages(prev => [...prev, { 
+        text: "אני בודקת את הדיווחים שלך...", 
+        isUser: false,
+        isTyping: true,
+        typingText: "בודקת"
+      }]);
+      
+      const response = await api.get(`/api/reports?nickname=${encodeURIComponent(userNickname)}`);
+      const reports = response.data.reports || [];
+      
+      // Remove typing indicator
+      setMessages(prev => prev.filter(msg => !msg.isTyping));
+      
+      if (reports.length === 0) {
+        setMessages(prev => [...prev, { 
+          text: `${displayNickname}, זה הדיווח הראשון שלך אצלנו. אני כאן כדי לעזור לך בכל פעם שתצטרכי 💗`, 
+          isUser: false 
+        }]);
+      } else {
+        // Show summary message
+        setMessages(prev => [...prev, { 
+          text: `מצאתי ${reports.length} דיווח${reports.length > 1 ? 'ים' : ''} קודמ${reports.length > 1 ? 'ים' : 'ם'} שלך. הנה סיכום:`, 
+          isUser: false 
+        }]);
+        
+        // Display each report in human tone
+        for (let i = 0; i < Math.min(reports.length, 3); i++) { // Show max 3 reports
+          const report = reports[i];
+          const date = new Date(report.createdAt);
+          const dateStr = date.toLocaleDateString('he-IL', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+          
+          const riskLevel = report.analysis?.riskLevel || 'לא זוהה';
+          const category = report.analysis?.category || 'לא זוהה';
+          const explanation = report.analysis?.explanation || '';
+          
+          // Create human-readable summary without calendar emoji
+          let summary = `${dateStr}\n`;
+          summary += `זיהיתי ${riskLevel === 'גבוה' ? 'רמת סיכון גבוהה' : riskLevel === 'בינוני' ? 'רמת סיכון בינונית' : 'רמת סיכון נמוכה'}`;
+          if (category !== 'לא זוהה') {
+            summary += ` וזה נראה כמו ${category}`;
+          }
+          if (explanation) {
+            summary += `.\n${explanation}`;
+          }
+          
+          await showMessageWithTyping(summary, 1200, false, "מקלידה");
+        }
+        
+        if (reports.length > 3) {
+          await showMessageWithTyping(`ועוד ${reports.length - 3} דיווח${reports.length - 3 > 1 ? 'ים' : ''} נוספים.`, 1000, false, "מקלידה");
+        }
+        
+        // Support line at the end with nickname - add delay before showing
+        await new Promise(resolve => setTimeout(resolve, 800));
+        await showMessageWithTyping(`את לא לבד ${displayNickname} 💗`, 1500, false, "חושבת");
+      }
+      
+      // Show closing message and music player
+      setTimeout(() => {
+        setMessages(prev => [...prev, { 
+          text: "זה בסדר גמור. אני כאן מתי שתרצי לחזור 💙", 
+          isUser: false 
+        }]);
+        setShowMusicPlayer(true);
+      }, 500);
+      
+    } catch (error) {
+      console.error('Error fetching reports:', error);
+      setMessages(prev => {
+        const filtered = prev.filter(msg => !msg.isTyping);
+        return [...filtered, { 
+          text: "סליחה, לא הצלחתי לטעון את הדיווחים כרגע. אבל אני כאן כדי לעזור לך 💗", 
+          isUser: false 
+        }];
+      });
+      
+      // Show closing message anyway
+      setTimeout(() => {
+        setMessages(prev => [...prev, { 
+          text: "זה בסדר גמור. אני כאן מתי שתרצי לחזור 💙", 
+          isUser: false 
+        }]);
+        setShowMusicPlayer(true);
+      }, 1000);
+    }
   };
 
   // Handle continuation choice
@@ -658,15 +838,10 @@ const ChatInterface = () => {
         // Show music player based on the feeling they selected at the beginning
         setShowMusicPlayer(true);
       }, 500);
-    } else if (choice === "לעשות משהו נוסף") {
-      // User wants to do something else - show text input for follow-up question
+    } else if (choice === "לראות סיכום הדיווחים שלי") {
+      // User wants to see reports history
       setTimeout(() => {
-        setMessages(prev => [...prev, { 
-          text: "איך עוד אוכל לעזור לך?", 
-          isUser: false 
-        }]);
-        // Enable follow-up help text input
-        setIsFollowUpHelp(true);
+        showReportsHistory();
       }, 500);
     }
   };
@@ -685,7 +860,7 @@ const ChatInterface = () => {
 
   // Determine what to show: text input or chips
   const currentQuestion = questions[currentQuestionIndex];
-  const showTextInput = !isToneSelection && !isContinuationPrompt && ((currentQuestion && currentQuestion.type === "text" && !analyzeLoading) || isWaitingForEmailInput || isFollowUpHelp);
+  const showTextInput = !isToneSelection && !isContinuationPrompt && ((currentQuestion && currentQuestion.type === "text" && !analyzeLoading) || isWaitingForEmailInput);
 
   return (
     <div className={styles.chatContainer}>
@@ -698,6 +873,7 @@ const ChatInterface = () => {
               isUser={msg.isUser} 
               isTyping={msg.isTyping}
               isEmailBadge={msg.isEmailBadge}
+              typingText={msg.typingText || "חושבת"}
             />
           </div>
         ))}
