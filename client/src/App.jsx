@@ -1,9 +1,9 @@
-import { BrowserRouter, Routes, Route, Link } from 'react-router'
+import { BrowserRouter, Routes, Route } from 'react-router'
 import Home from './pages/HomePage/HomePage';
 import { AnalyzeProvider } from './context/AnalyzeContext';
 import styles from './styles/App.module.css';
 
-import projectLogo from './assets/project-logo.png'
+import projectLogo from './assets/logo.png'
 
 function App() {
   return (
@@ -12,9 +12,7 @@ function App() {
       <div className={styles.app}>
         <header className={styles.appHeader}>
           <img src={projectLogo} alt="Logo" className={styles.appLogo} />
-          <nav className={styles.appNav}>
-            <Link to="/" className={styles.appLink}>Home</Link>
-          </nav>
+          <h1 className={styles.appTitle}>My Digital Sister</h1>
         </header>
         <main className={styles.main}>
           <Routes>
@@ -22,7 +20,7 @@ function App() {
           </Routes>
         </main>
         <footer className={styles.footer}>
-          <p>&copy; 2024 My App</p>
+          <p>My Digital Sister &copy; 2026</p>
         </footer>
       </div>
     </BrowserRouter>

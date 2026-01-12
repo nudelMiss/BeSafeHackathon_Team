@@ -685,7 +685,7 @@ const ChatInterface = () => {
       } else {
         // Show summary message
         setMessages(prev => [...prev, { 
-          text: `מצאתי ${reports.length} דיווח${reports.length > 1 ? 'ים' : ''} קודמ${reports.length > 1 ? 'ים' : ''} שלך. הנה סיכום:`, 
+          text: `מצאתי ${reports.length} דיווח${reports.length > 1 ? 'ים' : ''} קודמ${reports.length > 1 ? 'ים' : 'ם'} שלך. הנה סיכום:`, 
           isUser: false 
         }]);
         
