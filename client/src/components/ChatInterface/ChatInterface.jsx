@@ -394,6 +394,18 @@ const ChatInterface = () => {
       setTimeout(() => {
         // Use the question text as-is (no special personalization needed)
         let questionText = nextQuestion.text;
+        if (nextQuestion.key === 'feeling') {
+          const nickname = (lastQuestionKey === 'userIdentifier' && lastQuestionValue) 
+            ? lastQuestionValue 
+            : userData.userIdentifier;
+          
+          if (nickname) {
+            questionText = `היי ${nickname} איך את מרגישה עכשיו? את יכולה לבחור כמה רגשות שמתאימים למה שעובר עלייך `;
+          } else {
+            // Fallback if nickname not available yet
+            questionText = "איך את מרגישה עכשיו? את יכולה לבחור כמה רגשות שמתאימים למה שעובר עלייך";
+          }
+        }
         
         setMessages(prev => [...prev, { text: questionText, isUser: false }]);
         
