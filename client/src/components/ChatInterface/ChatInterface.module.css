@@ -66,6 +66,8 @@
   flex-shrink: 0;
   box-sizing: border-box;
   scroll-margin: 0;
+  scroll-margin-bottom: 0;
+  position: relative;
 }
 
 .textInput {
@@ -79,6 +81,8 @@
   transition: all 0.2s;
   background-color: #ffffff;
   scroll-margin: 0;
+  scroll-margin-bottom: 0;
+  -webkit-overflow-scrolling: auto;
 }
 
 .textInput:focus {

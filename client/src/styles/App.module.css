@@ -8,18 +8,23 @@
   overflow: hidden;
   box-sizing: border-box;
   background: linear-gradient(135deg, #1a1a3e 0%, #2d1b4e 50%, #1a1a3e 100%);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
 }
 
 .appHeader {
   background: linear-gradient(135deg, #FFB6C1 0%, #FF99C8 50%, #FFB6C1 100%);
-  padding: 90px 30px 12px 30px;
+  padding: 240px 20px 10px 30px;
   color: white;
   display: flex;
   align-items: center;
   justify-content: flex-start;
   gap: 20px;
   height: auto;
-  min-height: 70px;
+  min-height: 80px;
   overflow: visible;
   flex-shrink: 0;
   box-shadow: 0 4px 15px rgba(255, 179, 209, 0.15);
@@ -55,21 +60,21 @@
 .main {
   padding: 20px; /* Equal padding on all sides to match header/footer margins */
   background-color: #fff5f8;
-  min-height: calc(100vh - 155px); /* Account for larger header and smaller footer */
-  max-height: calc(100vh - 155px);
+  min-height: calc(100vh - 170px); /* Account for larger header and smaller footer */
+  max-height: calc(100vh - 170px);
   overflow: hidden;
   position: relative;
 }
 
 .footer {
-  padding: 3px 10px 10px 10px;
+  padding: 2px 10px 6px 10px;
   background: linear-gradient(180deg, rgba(255, 179, 209, 0.95), rgba(255, 179, 209, 1));
   color: white;
   position: relative;
   width: 100%;
   text-align: center;
   flex-shrink: 0;
-  font-size: 0.85em;
+  font-size: 0.75em;
   box-shadow: 0 -5px 15px rgba(255, 179, 209, 0.1);
   border-top: 1px solid rgba(255, 255, 255, 0.2);
 }
